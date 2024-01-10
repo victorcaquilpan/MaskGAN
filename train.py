@@ -29,82 +29,129 @@ import wandb
 import copy
 
 
-def validate(val_set, model):
+def validate(val_set, model, inferer, result_dir, epoch):
+    # Getting MAE
+    metric_mae = torch.nn.L1Loss()
+    # Getting MSE
+    metric_mse = torch.nn.MSELoss()
     #ssim = StructuralSimilarityIndexMeasure(data_range=1.0)
-    metric = torch.nn.L1Loss()
+    # Getting SSIM
+    metric_ssim = monai.metrics.SSIMMetric(spatial_dims=3)
+    # Getting PSNR
+    metric_psnr = PeakSignalNoiseRatio()
+
     model.eval()
-    errors = 0
+    mae = 0
+    mse = 0
+    ssim = 0
+    psnr = 0
+    cnt = 0
     for i, data in enumerate(val_set):  # inner loop within one epoch
-        model.set_input(data)         # unpack data from dataset and apply preprocessing
-        model.test()   # calculate loss functions, get gradients, update network weights
-        visuals = model.get_current_visuals()
-        real = visuals['real_B']
-        pred = visuals['fake_B']
-        errors += metric(pred.cpu(), real.cpu())
-    return (errors/len(val_set)).item()
+        with torch.no_grad():
+            pred = inferer(data['A'].cuda(), network=model.netG_A)
+        real = data['B']
+        mae += metric_mae(pred.cpu(), real)
+        mse += metric_mse(pred.cpu(), real)
+        ssim += metric_ssim(pred.cpu(), real)
+        psnr += metric_psnr(pred.cpu(), real)
+        
+        if i == 0:
+            save_nifti(pred, result_dir, f'{epoch}_val_fake.nii')
+        cnt += 1
+    return (mae/cnt).item(), (mse/cnt).item(), (ssim/cnt).item(), (psnr/cnt).item()
+  
 
 if __name__ == '__main__':
-    opt = TrainOptions().parse()   # get training options
-    wandb.init(project="cycle-transformer", name=opt.name)
-    train_dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
-    dataset_size = len(train_dataset)    # get the number of images in the dataset.
-    print('The number of training images = %d' % dataset_size)
 
+    # -----  Loading the init options -----
+    opt = TrainOptions().parse()
+    wandb_opt = vars(opt)
+    
+    # Initialize WANDB setting
+    wandb.init(project="3d-cyclegan", name=wandb_opt['name'], config = wandb_opt)
+
+    # -----  Transformation and Augmentation process for the data  -----
+    min_pixel = int(opt.min_pixel * ((opt.patch_size[0] * opt.patch_size[1] * opt.patch_size[2]) / 100))
+    # trainTransforms = [
+    #             NiftiDataset.Resample(opt.new_resolution, opt.resample),
+    #             NiftiDataset.Augmentation(),
+    #             #NiftiDataset.Padding((opt.patch_size[0], opt.patch_size[1], opt.patch_size[2])),
+    #             NiftiDataset.RandomCrop((opt.patch_size[0], opt.patch_size[1], opt.patch_size[2]), opt.drop_ratio, min_pixel),
+    #             ]
+    
+    # train_set = NifitDataSet(opt.data_path, which_direction='AtoB', transforms=trainTransforms, shuffle_labels=True, train=True)
+    train_set = UnalignedDataset(opt)
+    print('length train list:', len(train_set))
+    train_loader = DataLoader(train_set, batch_size=opt.batch_size, shuffle=True, num_workers=opt.workers, pin_memory=True)  # Here are then fed to the network with a defined batch size
+
+    result_dir = os.path.join(opt.checkpoints_dir, opt.name, 'visuals')
     val_opt = copy.deepcopy(opt)
     val_opt.phase = 'val'
-    val_opt.serial_batch = True
-    val_dataset = create_dataset(val_opt)  # create a dataset given opt.dataset_mode and other options
+    val_opt.serial_batches = True
+    val_dataset = UnalignedDataset(val_opt)  # create a dataset given opt.dataset_mode and other options
+    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=opt.workers, pin_memory=True)  # Here are then fed to the network with a defined batch size
+    inferer = SlidingWindowInferer(roi_size=opt.patch_size, sw_batch_size=4, mode="gaussian")
+    # -----------------------------------------------------
+    model = create_model(opt)  # creation of the model
+    model.setup(opt)
+    if opt.continue_train:
+        model.load_networks(opt.which_epoch)
+    visualizer = Visualizer(opt)
+    total_steps = 0
+    print("Start training")
+    best = 0
+    for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
+        epoch_start_time = time.time()
+        iter_data_time = time.time()
+        epoch_iter = 0
 
-    model = create_model(opt)      # create a model given opt.model and other options
-    model.setup(opt)               # regular setup: load and print networks; create schedulers
-    visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
-    total_iters = 0                # the total number of training iterations
-    best = 1000
-    for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
-        epoch_start_time = time.time()  # timer for entire epoch
-        iter_data_time = time.time()    # timer for data loading per iteration
-        epoch_iter = 0                  # the number of training iterations in current epoch, reset to 0 every epoch
-        model.lambda_shape = (epoch/(opt.niter + opt.niter_decay + 1))*model.opt.lambda_shape
-
-        model.train()
-        for i, data in enumerate(train_dataset):  # inner loop within one epoch
-            iter_start_time = time.time()  # timer for computation per iteration
-            if total_iters % opt.print_freq == 0:
+        for i, data in enumerate(train_loader):
+            iter_start_time = time.time()
+            if total_steps % opt.print_freq == 0:
                 t_data = iter_start_time - iter_data_time
             visualizer.reset()
-            total_iters += opt.batch_size
+            total_steps += opt.batch_size
             epoch_iter += opt.batch_size
-            model.set_input(data)         # unpack data from dataset and apply preprocessing
-            model.optimize_parameters()   # calculate loss functions, get gradients, update network weights
-
-            if total_iters % opt.display_freq == 0:   # display images on visdom and save images to a HTML file
-                save_result = total_iters % opt.update_html_freq == 0
-                model.compute_visuals()
-                visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
-
-            if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
+            model.set_input(data)
+            model.optimize_parameters()
+            if total_steps % opt.print_freq == 0:
                 losses = model.get_current_losses()
-                t_comp = (time.time() - iter_start_time) / opt.batch_size
-                visualizer.print_current_losses(epoch, epoch_iter, losses, t_comp, t_data)
-                if opt.display_id > 0:
-                    visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, losses)
+                # Create a dictionary for wandb                                          # ADDED
+                metrics_train = {f'train/{key}': value for key, value in losses.items()} # ADDED
+                wandb.log(metrics_train)                                                 # ADDED
 
-            if total_iters % opt.save_latest_freq == 0:   # cache our latest model every <save_latest_freq> iterations
-                print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
-                save_suffix = 'iter_%d' % total_iters if opt.save_by_iter else 'latest'
-                model.save_networks(save_suffix)
+
+                t = (time.time() - iter_start_time) / opt.batch_size
+                visualizer.print_current_losses(epoch, epoch_iter, losses, t, t_data)
+                visuals = model.get_current_visuals()
+                visualizer.save_results(visuals, epoch)
+
+            if total_steps % opt.save_latest_freq == 0:
+                print('saving the latest model (epoch %d, total_steps %d)' %
+                      (epoch, total_steps))
+                model.save_networks('latest')
+                # visuals = model.get_current_visuals()
+                # visualizer.save_results(visuals, epoch)
 
             iter_data_time = time.time()
 
-        if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
-            perf = validate(val_dataset, model)
-            print('saving the model at the end of epoch %d, iters %d, MAE %d' % (epoch, total_iters, perf))
+        if epoch % opt.save_epoch_freq == 0:
+            perf = validate(val_loader, model, inferer, result_dir, epoch)
+            metrics_val = {"val/MAE": perf[0], "val/MSE": perf[1], "val/SSIM" : perf[2], "val/PSNR": perf[3]} # ADDED
+            wandb.log(metrics_val)          # ADDED
             model.save_networks('latest')
             model.save_networks(epoch)
-            if best > perf:
-                print(f"Best Model with MAE={best}")
+        
+            #wandb.log({'val_ssim': perf})
+            model.save_networks('latest')
+            if perf[2] > best:
+                print(f"Best Model with SSIM={perf[2]}")
                 model.save_networks('best')
-                best = perf
+                best = perf[2]
 
-        print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time))
-        model.update_learning_rate()                     # update learning rates at the end of every epoch.
+            print('saving the model at the end of epoch %d, iters %d' %
+                  (epoch, total_steps))
+
+        print('End of epoch %d / %d \t Time Taken: %d sec' %
+              (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time))
+        model.update_learning_rate()
