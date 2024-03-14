@@ -5,6 +5,7 @@ from PIL import Image
 import random
 import numpy as np
 from torchvision import io
+import re
 
 class UnalignedDataset(BaseDataset):
     """
@@ -49,6 +50,22 @@ class UnalignedDataset(BaseDataset):
         # self.transform_maskA = get_transform(self.opt, grayscale=(self.input_nc == 1), mask=True)
         # self.transform_maskB = get_transform(self.opt, grayscale=(self.output_nc == 1), mask=True)
 
+        # Check how many 3D images we are considering
+        A_paths_main_img = [img.split("/")[-1] for img in self.A_paths]
+        A_paths_main_img = [img.split("_")[0] for img in A_paths_main_img]
+        self.number_3d_images_A = len(np.unique(A_paths_main_img))
+        # Same for set B
+        B_paths_main_img = [img.split("/")[-1] for img in self.B_paths]
+        B_paths_main_img = [img.split("_")[0] for img in B_paths_main_img]
+        self.number_3d_images_B = len(np.unique(B_paths_main_img))
+
+        # Save relative position of each img
+        self.relative_pos_A = [int(img.split(".")[-2].split("_")[-1]) for img in self.A_paths]
+        self.relative_pos_B = [int(img.split(".")[-2].split("_")[-1]) for img in self.B_paths]
+
+        # Set a margin to use images from a similar relative position
+        self.MARGIN_POSITION = 3 # This is percentage
+        
     def __getitem__(self, index):
         """Return a data point and its metadata information.
 
@@ -63,10 +80,22 @@ class UnalignedDataset(BaseDataset):
         """
         index_A = index % self.A_size
         A_path = self.A_paths[index_A]  # make sure index is within then range
+
         if self.opt.serial_batches:   # make sure index is within then range
             index_B = index % self.B_size
         else:   # randomize the index for domain B to avoid fixed pairs.
-            index_B = random.randint(0, self.B_size - 1)
+             # Check the relative position of the image
+
+            A_path_spplited = A_path.split(".")
+            A_relative_position = A_path_spplited[-2].split("_")[-1]
+            # Convert to a number
+            A_relative_position = float(A_relative_position)
+
+            # Obtain the index of the img that we are looking for
+            potential_indexes = [index for index, value in enumerate(self.relative_pos_B) if (A_relative_position-self.MARGIN_POSITION) <= value <= (A_relative_position + self.MARGIN_POSITION)]
+            index_position = random.randint(0, len(potential_indexes) - 1)
+            index_B = potential_indexes[index_position]
+            #index_B = random.randint(0, self.B_size - 1)
         B_path = self.B_paths[index_B]
         maskA_path = self.maskA_paths[index_A]
         maskB_path = self.maskB_paths[index_B]
@@ -77,7 +106,7 @@ class UnalignedDataset(BaseDataset):
         # B_mask = Image.open(maskB_path)
         A_img = io.read_image(A_path)
         B_img = io.read_image(B_path)
-
+    
         A_mask = io.read_image(maskA_path)
         B_mask = io.read_image(maskB_path)
         
@@ -104,4 +133,5 @@ class UnalignedDataset(BaseDataset):
         As we have two datasets with potentially different number of images,
         we take a maximum of
         """
-        return max(self.A_size, self.B_size)
+        #return max(self.A_size, self.B_size)
+        return self.A_size

@@ -36,8 +36,6 @@ import glob
 import shutil
 import torch
 
-
-
 if __name__ == '__main__':
     opt = TestOptions().parse()  # get test options
     # hard-code some parameters for test
@@ -84,6 +82,8 @@ if __name__ == '__main__':
         if i % 5 == 0:  # save images to an HTML file
             print('processing (%04d)-th image... %s' % (i, img_path))
         save_images(webpage, visuals, img_path, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize)
+
+
     webpage.save()  # save the HTML
     print("Move images")
     ### Save results

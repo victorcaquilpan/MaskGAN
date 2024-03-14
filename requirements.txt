@@ -9,3 +9,6 @@ protobuf==3.20.*
 torchmetrics==1.2.1
 antspyx==0.4.2 
 nibabel==5.2.0 
+elasticdeform
+
+

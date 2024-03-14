@@ -6,7 +6,6 @@ from torch import Tensor
 from typing import Tuple, List, Union, Tuple, Optional
 import torchvision
 import scipy.stats as st
-import elasticdeform.torch as etorch
 
 
 class Compose:
@@ -52,16 +51,7 @@ class Compose:
 #         noisy = image + image * gauss
 #         return noisy
 
-class RandomElasticDeform:
-    def __init__(self, sigma=1.0) -> None:
-        self.sigma = sigma
 
-    def __call__(self, img: Tensor, mask: Tensor) -> Tuple[Tensor, Tensor]:
-        #displacement = torch.tensor(np.random.randn(2, 3, 3) * self.sigma)
-        displacement = torch.rand(2,3,3)*self.sigma
-        deformed_mask = etorch.deform_grid(mask.squeeze(0), displacement, order=3)
-        deformed_mask[deformed_mask > 127] = 255
-        return img, deformed_mask.unsqueeze(0)
 
 class GaussianNoise:
     def __init__(self, percent=0.01):

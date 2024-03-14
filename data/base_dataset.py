@@ -101,9 +101,6 @@ def get_transform(opt, params=None, grayscale=True, method=Image.BICUBIC, conver
     if not opt.no_flip:
         transform_list.append(aug.RandomHorizontalFlip())
 
-    if 'noise' in opt.preprocess:
-        #transform_list.append(aug.RandomMaskAffine(shear=[-2,2]))
-        transform_list.append(aug.RandomElasticDeform(sigma=1.0))
 
     if convert:
         #transform_list += [transforms.ToTensor()]

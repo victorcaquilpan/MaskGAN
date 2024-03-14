@@ -112,7 +112,7 @@ def save_slice(img, mask, data_dir, data_mask_dir, filename):
 print("Defining main directories")
 
 ### Train
-out_dir = '../../data/sliced_paired_images'
+out_dir = '../../data/sliced_paired_images_erase'
 root_ct = '../../data/paired_data/ct/*.nii.gz'
 root_mri = '../../data/paired_data/mri/*.nii.gz'
 output_ct_dir = f'{out_dir}/train_B'
@@ -168,6 +168,7 @@ for idx, filepath in enumerate(ct_files):
     visualize(img, f'{results}/ct')
     visualize(mask, f'{results}/ct_mask') 
 
+    break
 
 print("Creating MR images")
 for idx, filepath in enumerate(mri_files):
@@ -184,7 +185,6 @@ for idx, filepath in enumerate(mri_files):
     #filename = os.path.splitext(os.path.basename(filepath))[0]
     img, mask = get_3d_mask(img, min_= 0, th=th_mri, width=10)
 
-    
     # Our scans have irregular size, crop to adjust, comment out as needed
     img, mask = crop_scan(img, mask, crop,crop_h)
 
@@ -197,6 +197,7 @@ for idx, filepath in enumerate(mri_files):
     visualize(img, f'{results}/mri')
     visualize(mask, f'{results}/mri_mask')
 
+    break
 
 root_ct = '../../data/paired_data/ct/*.nii.gz'
 root_mri = '../../data/paired_data/mri/*.nii.gz'
@@ -249,7 +250,7 @@ for img in range(0,4):
     mri = mri[non_zero_slices_mask]
     mask = mask[non_zero_slices_mask]
 
-    save_slice(mri, mask, outdir, outmask_dir, mri_names[img])
+    save_slice(mri, mask, outdir, outmask_dir, str(img).zfill(3))
 
     ct = nib.load(ct_file)
     ct = ct.get_fdata()
@@ -269,6 +270,6 @@ for img in range(0,4):
     non_zero_slices_mask = np.any(mask, axis=(1, 2))
     ct = ct[non_zero_slices_mask]
     mask = mask[non_zero_slices_mask]
-    save_slice(ct, mask, outdir, outmask_dir, ct_names[img])
+    save_slice(ct, mask, outdir, outmask_dir,str(img).zfill(3))
 
 
