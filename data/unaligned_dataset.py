@@ -5,7 +5,7 @@ from PIL import Image
 import random
 import numpy as np
 from torchvision import io
-import re
+from monai.transforms import Rand2DElasticd
 
 class UnalignedDataset(BaseDataset):
     """
@@ -63,9 +63,34 @@ class UnalignedDataset(BaseDataset):
         self.relative_pos_A = [int(img.split(".")[-2].split("_")[-1]) for img in self.A_paths]
         self.relative_pos_B = [int(img.split(".")[-2].split("_")[-1]) for img in self.B_paths]
 
+        # Extract the name of images
+        self.image_names_A = [name.split('/')[-1].replace('.png','') for name in self.A_paths]
+        self.image_names_B = [name.split('/')[-1].replace('.png','') for name in self.B_paths]
+
+        # Create an auxiliar list to determine if an image is paired or not
+        self.paired_imgs_A = ['paired' in img for img in self.image_names_A]
+        self.paired_imgs_B = ['paired' in img for img in self.image_names_B]
+
+        # List values paired/unpaired for A set
+        self.idx_paired_A = [idx for idx, paired in enumerate(self.paired_imgs_A) if paired == True]
+        self.idx_unpaired_A = [idx for idx, paired in enumerate(self.paired_imgs_A) if paired != True]
+
+        # Extract the name of the base image
+        self.base_names_A = [img.split("_")[1] if 'paired' in img else img.split("_")[0] for img in self.image_names_A]
+        self.base_names_B = [img.split("_")[1] if 'paired' in img else img.split("_")[0] for img in self.image_names_B]
+
         # Set a margin to use images from a similar relative position
         self.MARGIN_POSITION = 3 # This is percentage
-        
+
+        # Define MONAI transforms to augment paired images
+        self.transform_paired = Rand2DElasticd(keys = ['mri','ct', 'mri_mask', 'ct_mask'],
+            prob=0.5,
+            spacing=(100, 100),
+            magnitude_range=(1, 2),
+            rotate_range=(0.2),
+            scale_range=(0.2, 0.2),
+            padding_mode="zeros")
+
     def __getitem__(self, index):
         """Return a data point and its metadata information.
 
@@ -78,14 +103,28 @@ class UnalignedDataset(BaseDataset):
             A_paths (str)    -- image paths
             B_paths (str)    -- image paths
         """
-        index_A = index % self.A_size
-        A_path = self.A_paths[index_A]  # make sure index is within then range
+           
+        #A_path = self.A_paths[index_A]  # make sure index is within then range
 
+        # If we have paired data in our set, we want to be sure that we are picking up a ratio of 50:50. Otherwise, don't consider this condition
+        if len(self.idx_paired_A) > 0:
+            # We define a ratio 50:50 paired:unpaired
+            paired = random.choice((True, False))
+            if paired:
+                index_A = random.choice(self.idx_paired_A)
+            else:
+                index_A = random.choice(self.idx_unpaired_A)
+        else:
+            paired = False
+            index_A = index % self.A_size
+        # Define image from A set
+        A_path = self.A_paths[index_A]
+        
+        # Define B image
         if self.opt.serial_batches:   # make sure index is within then range
             index_B = index % self.B_size
         else:   # randomize the index for domain B to avoid fixed pairs.
-             # Check the relative position of the image
-
+            # Check the relative position of the image
             A_path_spplited = A_path.split(".")
             A_relative_position = A_path_spplited[-2].split("_")[-1]
             # Convert to a number
@@ -93,6 +132,13 @@ class UnalignedDataset(BaseDataset):
 
             # Obtain the index of the img that we are looking for
             potential_indexes = [index for index, value in enumerate(self.relative_pos_B) if (A_relative_position-self.MARGIN_POSITION) <= value <= (A_relative_position + self.MARGIN_POSITION)]
+            # Considering inclusion of paired dataset, we need to select images from the paired CT scan
+            #paired_img = self.paired_imgs_A[index_A]
+            if paired:
+                base_img = self.base_names_A[index_A]
+                potential_indexes_paired = [idx for idx, img in enumerate(self.base_names_B) if base_img == img]
+                potential_indexes = list(set(potential_indexes) & set(potential_indexes_paired))
+
             index_position = random.randint(0, len(potential_indexes) - 1)
             index_B = potential_indexes[index_position]
             #index_B = random.randint(0, self.B_size - 1)
@@ -109,8 +155,17 @@ class UnalignedDataset(BaseDataset):
     
         A_mask = io.read_image(maskA_path)
         B_mask = io.read_image(maskB_path)
-        
-        # apply image transformation
+
+        # apply data augmentation to paired images
+        if paired:
+            #mri_augmented_base = self.transform_paired({'mri': torch.tensor(mri), 'ct': torch.tensor(ct), 'mri_mask' : torch.tensor(mri_mask), 'ct_mask': torch.tensor(ct_mask)})
+            paired_images = self.transform_paired({'mri': A_img, 'ct': B_img, 'mri_mask' : A_mask, 'ct_mask': B_mask})
+            A_img = paired_images['mri']
+            A_mask = paired_images['mri_mask']
+            B_img = paired_images['mri']
+            B_mask = paired_images['mri_mask']
+
+        # apply image transformation to standarize data
         A, A_mask = self.transform_A(A_img, A_mask)
         B, B_mask = self.transform_B(B_img, B_mask)
 

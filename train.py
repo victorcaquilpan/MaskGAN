@@ -59,27 +59,63 @@ def validate(val_set, model):
         ssim += metric_ssim(pred.cpu(), real.cpu())
         psnr += metric_psnr(pred.cpu(), real.cpu())
 
-        if i == 0:
+        # if i == 4:
+        #     # Save real
+        #     image_wandb_real = real.cpu().numpy()
+        #     image_wandb_real = np.concatenate(image_wandb_real, axis=1)
+        #     image_wandb_real = ((image_wandb_real + 1) * 127.5).astype(np.uint8)
+        #     image_wandb_real = PIL.Image.fromarray(np.squeeze(image_wandb_real))
+        #     image_wandb_real = image_wandb_real.convert("L")
+
+        #     # Save prediction
+        #     image_wandb_pred = pred.cpu().numpy()
+        #     image_wandb_pred = np.concatenate(image_wandb_pred, axis=1)
+        #     image_wandb_pred = ((image_wandb_pred + 1) * 127.5).astype(np.uint8)
+        #     image_wandb_pred = PIL.Image.fromarray(np.squeeze(image_wandb_pred))
+        #     image_wandb_pred = image_wandb_pred.convert("L")
+        #     if wandb: 
+        #         wandb.log({"val/examples": [wandb.Image(image_wandb_real, caption="real"),wandb.Image(image_wandb_pred, caption="prediction")]})
+
+        if i == 4: 
             # Save real
             image_wandb_real = real.cpu().numpy()
             image_wandb_real = np.concatenate(image_wandb_real, axis=1)
-            image_wandb_real = ((image_wandb_real + 1) * 127.5).astype(np.uint8)
-            image_wandb_real = PIL.Image.fromarray(np.squeeze(image_wandb_real))
-            image_wandb_real = image_wandb_real.convert("L")
-
             # Save prediction
             image_wandb_pred = pred.cpu().numpy()
             image_wandb_pred = np.concatenate(image_wandb_pred, axis=1)
+        elif i == 8 or i == 20:
+            # Save real
+            image_wandb_real_2 = real.cpu().numpy()
+            image_wandb_real_2 = np.concatenate(image_wandb_real_2, axis=1)
+            image_wandb_real = np.concatenate((image_wandb_real, image_wandb_real_2), axis=2)
+            # Save prediction
+            image_wandb_pred_2 = pred.cpu().numpy()
+            image_wandb_pred_2 = np.concatenate(image_wandb_pred_2, axis=1)
+            image_wandb_pred = np.concatenate((image_wandb_pred, image_wandb_pred_2), axis=2)
+        elif i == 24:
+            image_wandb_real_2 = real.cpu().numpy()
+            image_wandb_real_2 = np.concatenate(image_wandb_real_2, axis=1)
+            image_wandb_real = np.concatenate((image_wandb_real, image_wandb_real_2), axis=2)
+            image_wandb_real = ((image_wandb_real + 1) * 127.5).astype(np.uint8)
+            image_wandb_real = PIL.Image.fromarray(np.squeeze(image_wandb_real))
+            image_wandb_real = image_wandb_real.convert("L")
+            # Save prediction
+            image_wandb_pred_2 = pred.cpu().numpy()
+            image_wandb_pred_2 = np.concatenate(image_wandb_pred_2, axis=1)
+            image_wandb_pred = np.concatenate((image_wandb_pred, image_wandb_pred_2), axis=2)
             image_wandb_pred = ((image_wandb_pred + 1) * 127.5).astype(np.uint8)
             image_wandb_pred = PIL.Image.fromarray(np.squeeze(image_wandb_pred))
             image_wandb_pred = image_wandb_pred.convert("L")
-            wandb.log({"val/examples": [wandb.Image(image_wandb_real, caption="real"),wandb.Image(image_wandb_pred, caption="prediction")]})
+            if wandb: 
+                wandb.log({"val/examples": [wandb.Image(image_wandb_real, caption="real"),wandb.Image(image_wandb_pred, caption="prediction")]})
 
     return (mae/len(val_set)).item(), (mse/len(val_set)).item(), (ssim/len(val_set)).item(), (psnr/len(val_set)).item()
 
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
-    wandb.init(project="maskgan2D", name=opt.name) # ADDED
+    wandb = False
+    if wandb:
+        wandb.init(project="maskgan2D", name=opt.name) 
 
     train_dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     dataset_size = len(train_dataset)    # get the number of images in the dataset.
@@ -119,9 +155,10 @@ if __name__ == '__main__':
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()
-                # Create a dictionary for wandb                  # ADDED
-                metrics_train = {f'train/{key}': value for key, value in losses.items()} # ADDED
-                wandb.log(metrics_train) # ADDED
+                # Create a dictionary for wandb  
+                if wandb:        
+                    metrics_train = {f'train/{key}': value for key, value in losses.items()} 
+                    wandb.log(metrics_train) 
 
                 t_comp = (time.time() - iter_start_time) / opt.batch_size
                 visualizer.print_current_losses(epoch, epoch_iter, losses, t_comp, t_data)
@@ -138,8 +175,9 @@ if __name__ == '__main__':
         if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
             perf = validate(val_dataset, model)
             print('saving the model at the end of epoch %d, iters %d, MAE %d' % (epoch, total_iters, perf[0]))
-            metrics_val = {"val/MAE": perf[0], "val/MSE": perf[1], "val/SSIM" : perf[2], "val/PSNR": perf[3]} # ADDED
-            wandb.log(metrics_val)          # ADDED
+            if wandb: 
+                metrics_val = {"val/MAE": perf[0], "val/MSE": perf[1], "val/SSIM" : perf[2], "val/PSNR": perf[3]} 
+                wandb.log(metrics_val)         
             model.save_networks('latest')
             model.save_networks(epoch)
 
