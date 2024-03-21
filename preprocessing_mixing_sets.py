@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import ants
 import pandas as pd
-# import cv2
+import cv2
 # import imageio
 from PIL import Image
 from skimage.measure import label   
@@ -15,7 +15,6 @@ import skimage
 import os
 import glob
 import imageio
-
 
 def visualize(img, filename, step=10):
     shapes = img.shape
@@ -105,6 +104,12 @@ def save_slice(img, mask, data_dir, data_mask_dir, filename):
         #im = np.uint8(255*normalize(img[i]))
         im = img[i]
         m = 255*mask[i].astype(np.uint8)
+        
+        # Remove noise
+        kernel = np.ones((10,10), np.uint8) # Define the kernel size
+        dilated_mask = cv2.dilate(m.astype(np.uint8), kernel, iterations = 2)
+        im[dilated_mask == 0] = 0
+
         #m = np.uint8(255*normalize(mask[i]))
         imageio.imwrite(f'{data_dir}/{filename}_{str(i).zfill(3)}_{float_to_padded_string(round(i/len(img),2), 3)}.png', im)
         imageio.imwrite(f'{data_mask_dir}/{filename}_{str(i).zfill(3)}_{float_to_padded_string(round(i/len(img),2), 3)}.png', m)
@@ -112,7 +117,7 @@ def save_slice(img, mask, data_dir, data_mask_dir, filename):
 print("Defining main directories")
 
 ### TRAIN
-out_dir = '../../data/structured-data-solved-mixed-2d'
+out_dir = '../../data/structured-data-solved-mixed-cleaned-2d'
 
 train_root =  '../../data/structured-data-solved-mixed-3d/train/'
 val_root =  '../../data/structured-data-solved-mixed-3d/val/'
@@ -151,20 +156,19 @@ crop_h = 0.9
 print("Creating CT images for training")
 for idx, filepath in enumerate(ct_files_train): 
 
-    img = ants.image_read(filepath)
-    img = ants.resample_image(img, resample, False, 1)
-    img = img.numpy()
+    ct = ants.image_read(filepath)
+    ct = ants.resample_image(ct, resample, False, 1).numpy()
     # if '0db9b48e-2903-41a8-95f2-8f4a710d45ab_Thin_Bone' in filepath:
     #     img = np.transpose(img, (1, 0, 2))
     #filename = os.path.splitext(os.path.basename(filepath))[0]
 
-    img, mask = get_3d_mask(img, min_=min_ct, max_=max_ct, th=th)
+    ct, mask = get_3d_mask(ct, min_=min_ct, max_=max_ct, th=th)
     # Our scans have irregular size, crop to adjust, comment out as needed
-    img, mask = crop_scan(img, mask, crop,crop_h)
+    ct, mask = crop_scan(ct, mask, crop,crop_h)
 
     # Remove images with zero values in the mask
     non_zero_slices_mask = np.any(mask, axis=(1, 2))
-    img = img[non_zero_slices_mask]
+    ct = ct[non_zero_slices_mask]
     mask = mask[non_zero_slices_mask]
 
     # Enter the name of the file
@@ -176,23 +180,23 @@ for idx, filepath in enumerate(ct_files_train):
     else:
         filename = filename.zfill(3)
 
-    save_slice(img, mask, output_ct_dir, output_ct_mask_dir, filename)
-    visualize(img, f'{results}/ct')
+    save_slice(ct, mask, output_ct_dir, output_ct_mask_dir, filename)
+    visualize(ct, f'{results}/ct')
     visualize(mask, f'{results}/ct_mask')   
 
 print("Creating MR images for training")
 for idx, filepath in enumerate(mri_files_train):
-    img = ants.image_read(filepath)
-    img = ants.resample_image(img, resample, False, 1)
-    img = img.numpy()
+
+    mri = ants.image_read(filepath)
+    mri = ants.resample_image(mri, resample, False, 1).numpy()
     #filename = os.path.splitext(os.path.basename(filepath))[0]
-    img, mask = get_3d_mask(img, min_=0, th=th, width=10)
+    mri, mask = get_3d_mask(mri, min_=0, th=th, width=10)
     # Our scans have irregular size, crop to adjust, comment out as needed
-    img, mask = crop_scan(img, mask, crop,crop_h)
+    mri, mask = crop_scan(mri, mask, crop,crop_h)
 
     # Remove images with zero values in the mask
     non_zero_slices_mask = np.any(mask, axis=(1, 2))
-    img = img[non_zero_slices_mask]
+    mri = mri[non_zero_slices_mask]
     mask = mask[non_zero_slices_mask]
 
     # Enter the name of the file
@@ -204,9 +208,9 @@ for idx, filepath in enumerate(mri_files_train):
     else:
         filename = filename.zfill(3)
 
-    save_slice(img, mask, output_mri_dir, output_mri_mask_dir, filename)
+    save_slice(mri, mask, output_mri_dir, output_mri_mask_dir, filename)
     
-    visualize(img, f'{results}/mri')
+    visualize(mri, f'{results}/mri')
     visualize(mask, f'{results}/mri_mask')
 
 ### VALIDATION

@@ -162,8 +162,8 @@ class UnalignedDataset(BaseDataset):
             paired_images = self.transform_paired({'mri': A_img, 'ct': B_img, 'mri_mask' : A_mask, 'ct_mask': B_mask})
             A_img = paired_images['mri']
             A_mask = paired_images['mri_mask']
-            B_img = paired_images['mri']
-            B_mask = paired_images['mri_mask']
+            B_img = paired_images['ct']
+            B_mask = paired_images['ct_mask']
 
         # apply image transformation to standarize data
         A, A_mask = self.transform_A(A_img, A_mask)

@@ -52,6 +52,7 @@ def validate(val_set, model):
         model.set_input(data)         # unpack data from dataset and apply preprocessing
         model.test()   # calculate loss functions, get gradients, update network weights
         visuals = model.get_current_visuals()
+        mri = visuals['real_A']
         real = visuals['real_B']
         pred = visuals['fake_B']
         mae += metric_mae(pred.cpu(), real.cpu())
@@ -77,6 +78,8 @@ def validate(val_set, model):
         #         wandb.log({"val/examples": [wandb.Image(image_wandb_real, caption="real"),wandb.Image(image_wandb_pred, caption="prediction")]})
 
         if i == 4: 
+            image_wandb_mri = mri.cpu().numpy()
+            image_wandb_mri = np.concatenate(image_wandb_mri, axis=1)
             # Save real
             image_wandb_real = real.cpu().numpy()
             image_wandb_real = np.concatenate(image_wandb_real, axis=1)
@@ -85,6 +88,9 @@ def validate(val_set, model):
             image_wandb_pred = np.concatenate(image_wandb_pred, axis=1)
         elif i == 8 or i == 20:
             # Save real
+            image_wandb_mri_2 = mri.cpu().numpy()
+            image_wandb_mri_2 = np.concatenate(image_wandb_mri_2, axis=1)
+            image_wandb_mri = np.concatenate((image_wandb_mri, image_wandb_mri_2), axis=2)
             image_wandb_real_2 = real.cpu().numpy()
             image_wandb_real_2 = np.concatenate(image_wandb_real_2, axis=1)
             image_wandb_real = np.concatenate((image_wandb_real, image_wandb_real_2), axis=2)
@@ -93,6 +99,12 @@ def validate(val_set, model):
             image_wandb_pred_2 = np.concatenate(image_wandb_pred_2, axis=1)
             image_wandb_pred = np.concatenate((image_wandb_pred, image_wandb_pred_2), axis=2)
         elif i == 24:
+            image_wandb_mri_2 = mri.cpu().numpy()
+            image_wandb_mri_2 = np.concatenate(image_wandb_mri_2, axis=1)
+            image_wandb_mri = np.concatenate((image_wandb_mri, image_wandb_mri_2), axis=2)
+            image_wandb_mri = ((image_wandb_mri + 1) * 127.5).astype(np.uint8)
+            image_wandb_mri = PIL.Image.fromarray(np.squeeze(image_wandb_mri))
+            image_wandb_mri = image_wandb_mri.convert("L")
             image_wandb_real_2 = real.cpu().numpy()
             image_wandb_real_2 = np.concatenate(image_wandb_real_2, axis=1)
             image_wandb_real = np.concatenate((image_wandb_real, image_wandb_real_2), axis=2)
@@ -106,15 +118,15 @@ def validate(val_set, model):
             image_wandb_pred = ((image_wandb_pred + 1) * 127.5).astype(np.uint8)
             image_wandb_pred = PIL.Image.fromarray(np.squeeze(image_wandb_pred))
             image_wandb_pred = image_wandb_pred.convert("L")
-            if wandb: 
-                wandb.log({"val/examples": [wandb.Image(image_wandb_real, caption="real"),wandb.Image(image_wandb_pred, caption="prediction")]})
+            if wandb_run: 
+                wandb.log({"val/examples": [wandb.Image(image_wandb_mri, caption="MRI"),wandb.Image(image_wandb_real, caption="CT"),wandb.Image(image_wandb_pred, caption="sCT")]})
 
     return (mae/len(val_set)).item(), (mse/len(val_set)).item(), (ssim/len(val_set)).item(), (psnr/len(val_set)).item()
 
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
-    wandb = False
-    if wandb:
+    wandb_run = True
+    if wandb_run:
         wandb.init(project="maskgan2D", name=opt.name) 
 
     train_dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
@@ -156,7 +168,7 @@ if __name__ == '__main__':
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()
                 # Create a dictionary for wandb  
-                if wandb:        
+                if wandb_run:        
                     metrics_train = {f'train/{key}': value for key, value in losses.items()} 
                     wandb.log(metrics_train) 
 
@@ -175,7 +187,7 @@ if __name__ == '__main__':
         if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
             perf = validate(val_dataset, model)
             print('saving the model at the end of epoch %d, iters %d, MAE %d' % (epoch, total_iters, perf[0]))
-            if wandb: 
+            if wandb_run: 
                 metrics_val = {"val/MAE": perf[0], "val/MSE": perf[1], "val/SSIM" : perf[2], "val/PSNR": perf[3]} 
                 wandb.log(metrics_val)         
             model.save_networks('latest')

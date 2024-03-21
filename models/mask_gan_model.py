@@ -27,7 +27,7 @@ class MaskGANModel(BaseModel):
     def __init__(self, opt):
         BaseModel.__init__(self, opt)
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
-        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B', 'maskA', 'maskB', 'shapeA', 'shapeB']
+        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B', 'maskA', 'maskB', 'shapeA', 'shapeB', 'paired_A', 'paired_B']
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         visual_names_A = ['real_A', 'fake_B', 'rec_A', 'o1_b', 'o2_b', 'o3_b', 'o_bg_b',
             'a1_b', 'a2_b', 'a3_b', 'a_bg_b',  'i1_b', 'i2_b', 'i3_b', 'i_last_b', 'mask_A', 
@@ -75,6 +75,9 @@ class MaskGANModel(BaseModel):
             self.criterionCycle = torch.nn.L1Loss()
             self.criterionIdt = torch.nn.L1Loss()
             self.criterionMask = torch.nn.L1Loss()
+            # INCLUDING CRITERIA FOR EVALUATING PAIRED IMAGES
+            self.criterionPaired = torch.nn.L1Loss()
+
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G = torch.optim.Adam(itertools.chain(self.netG_A.parameters(), self.netG_B.parameters()), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizer_D = torch.optim.Adam(itertools.chain(self.netD_A.parameters(), self.netD_B.parameters()), lr=opt.lr, betas=(opt.beta1, 0.999))
@@ -105,6 +108,7 @@ class MaskGANModel(BaseModel):
         self.mask_A = input['A_mask'].to(self.device)
         self.mask_B = input['B_mask'].to(self.device)
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
+        self.paired_imgs = [True if 'paired' in img else False for img in self.image_paths]
 
     # def forward(self):
     #     """Run forward pass; called by both functions <optimize_parameters> and <test>."""
@@ -133,8 +137,6 @@ class MaskGANModel(BaseModel):
         self.rec_a1_b, self.rec_a2_b, self.rec_a3_b, self.rec_a_bg_b =  att_rec_A[0], att_rec_A[1], att_rec_A[-2], att_rec_A[-1] 
         self.rec_i1_b, self.rec_i2_b, self.rec_i3_b, self.rec_i_last_b = image_rec_A[0], image_rec_A[1], image_rec_A[-2], image_rec_A[-1]
         self.rec_o1_b, self.rec_o2_b, self.rec_o3_b, self.rec_o_bg_b = output_rec_A[0], output_rec_A[1], output_rec_A[-2], output_rec_A[-1]
-
-
         self.fake_A, self.outputs_A, self.attentions_A, self.images_A  = self.netG_B(self.real_B)  # G_B(B)
         # self.o1_a, self.o2_a, self.o3_a, self.o4_a, self.o5_a, self.o6_a, self.o7_a, self.o8_a, self.o9_a, self.o10_a
         # self.a1_a, self.a2_a, self.a3_a, self.a4_a, self.a5_a, self.a6_a, self.a7_a, self.a8_a, self.a9_a, self.a10_a
@@ -145,7 +147,6 @@ class MaskGANModel(BaseModel):
         self.i1_a, self.i2_a, self.i_last_a= self.images_A[0], self.images_A[-2], self.images_A[-1]
         #self.a_fg_a = 1 - self.a_bg_a
         self.att_rec_bg_b = att_rec_B[-1]
-
 
     def backward_D_basic(self, netD, real, fake):
         """Calculate GAN loss for the discriminator
@@ -208,7 +209,7 @@ class MaskGANModel(BaseModel):
         self.loss_shapeA = lambda_shape * self.criterionMask(self.a_bg_a, self.att_rec_bg_a)
         loss_shape = self.loss_shapeA + self.loss_shapeB
 
-        loss_cor_coe_GA = networks.Cor_CoeLoss(self.fake_B, self.real_A) * self.opt.lambda_co_A# fake ct & real mr; Evaluate the Generator of ct(G_A)
+        loss_cor_coe_GA = networks.Cor_CoeLoss(self.fake_B, self.real_A) * self.opt.lambda_co_A # fake ct & real mr; Evaluate the Generator of ct(G_A)
         loss_cor_coe_GB = networks.Cor_CoeLoss(self.fake_A, self.real_B) * self.opt.lambda_co_B # fake mr & real ct; Evaluate the Generator of mr(G_B)
         loss_cor = loss_cor_coe_GA  + loss_cor_coe_GB
         # GAN loss D_A(G_A(A))
@@ -219,9 +220,14 @@ class MaskGANModel(BaseModel):
         self.loss_cycle_A = self.criterionCycle(self.rec_A, self.real_A) * lambda_A
         # Backward cycle loss || G_A(G_B(B)) - B||
         self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
+        # BACKWARD PAIRED LOSS A
+        self.loss_paired_A = self.criterionPaired(self.fake_A[self.paired_imgs], self.real_A[self.paired_imgs])
+        # BACKWARD PAIRED LOSS B
+        self.loss_paired_B = self.criterionPaired(self.fake_B[self.paired_imgs], self.real_B[self.paired_imgs])
+
         # combined loss and calculate gradients
         self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B \
-            + self.loss_idt_A + self.loss_idt_B + loss_mask + loss_shape + loss_cor
+            + self.loss_idt_A + self.loss_idt_B + loss_mask + loss_shape + loss_cor + self.loss_paired_A + self.loss_paired_B
         #self.loss_G.backward()
 
     def optimize_parameters(self):
