@@ -139,10 +139,13 @@ class UnalignedDataset(BaseDataset):
                 potential_indexes_paired = [idx for idx, img in enumerate(self.base_names_B) if base_img == img]
                 potential_indexes = list(set(potential_indexes) & set(potential_indexes_paired))
 
+            # Define position of B image
             index_position = random.randint(0, len(potential_indexes) - 1)
             index_B = potential_indexes[index_position]
             #index_B = random.randint(0, self.B_size - 1)
+        # Selecting the B image
         B_path = self.B_paths[index_B]
+        # Loading masks
         maskA_path = self.maskA_paths[index_A]
         maskB_path = self.maskB_paths[index_B]
         # A_img = Image.open(A_path).convert('RGB')
