@@ -90,6 +90,9 @@ class UnalignedDataset(BaseDataset):
             rotate_range=(0.2),
             scale_range=(0.2, 0.2),
             padding_mode="zeros")
+        
+        # To force testing over train set
+        self.force_testing = opt.force_testing
 
     def __getitem__(self, index):
         """Return a data point and its metadata information.
@@ -107,7 +110,7 @@ class UnalignedDataset(BaseDataset):
         #A_path = self.A_paths[index_A]  # make sure index is within then range
 
         # If we have paired data in our set, we want to be sure that we are picking up a ratio of 50:50. Otherwise, don't consider this condition
-        if len(self.idx_paired_A) > 0:
+        if len(self.idx_paired_A) > 0 and not self.force_testing:
             # We define a ratio 50:50 paired:unpaired
             paired = random.choice((True, False))
             if paired:
