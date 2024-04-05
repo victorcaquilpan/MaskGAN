@@ -145,7 +145,8 @@ print("Defining main directories")
 ### TRAIN
 
 # Define the output folder
-out_dir = '../../data/two_stage_approach/new_orientation_2d/'
+#out_dir = '../../data/two_stage_approach/new_orientation_2d'
+out_dir = '../../data/testing'
 
 # Define the sct folder input
 root_intermediate_sct = '../../data/two_stage_approach/intermediate_voxels/semi-supervised-cleaned-paired-imgs/'
@@ -183,11 +184,10 @@ sct_files_train = glob.glob(train_sct)
 #resample=(1.0, 1.0, 1.0)
 #min_ct, max_ct = -800, 1900
 th_ct = 50
-
 th_sct = 10
 #th_mri = 10
 # Set clip CT intensity
-min_ct, max_ct = -1000, 2000
+min_ct, max_ct = 0, 250
 #th = 10 # Consider pixel less than certain threshold as background (remove noise, artifacts)
 
 results = 'vis'
@@ -200,9 +200,6 @@ print("Creating sCT images for training")
 for idx, filepath in enumerate(sct_files_train): 
 
     sct = ants.image_read(filepath).numpy()
-    # Rotate to get the proper orientation
-    sct = np.rot90(sct, axes = (2, 1))
-    sct = np.flip(sct, axis = 1)
     # Rotate image for the second stage orientation
     sct = np.rot90(sct, axes = (0,1))
     #ct = ants.resample_image(ct, resample, False, 1).numpy()
@@ -283,9 +280,6 @@ print("Creating sCT images for validation")
 for i, subset in enumerate(sct_files_val):
 
     sct = ants.image_read(subset).numpy()
-    # Rotate to get the proper orientation
-    sct = np.rot90(sct, axes = (2, 1))
-    sct = np.flip(sct, axis = 1)
     # Rotate image for the second stage orientation
     sct = np.rot90(sct, axes = (0,1))
     #ct = ants.resample_image(ct, resample, False, 1).numpy()
@@ -308,6 +302,8 @@ print("Creating CT images for validation")
 for i, subset in enumerate(ct_files_val):
 
     ct = ants.image_read(subset).numpy()
+    # Rotate image for the second stage orientation
+    ct = np.rot90(ct, axes = (0,1))
     #ct = ants.resample_image(ct, resample, False, 1).numpy()
     ct, mask = get_3d_mask(ct, min_=min_ct,th=th_ct, max_=max_ct)
     ct, mask = crop_scan(ct, mask, crop, crop_h, 0.2, ignore_zero=False)
@@ -342,9 +338,6 @@ print("Creating sCT images for testing")
 for i, subset in enumerate(sct_files_test):
 
     sct = ants.image_read(subset).numpy()
-    # Rotate to get the proper orientation
-    sct = np.rot90(sct, axes = (2, 1))
-    sct = np.flip(sct, axis = 1)
     # Rotate image for the second stage orientation
     sct = np.rot90(sct, axes = (0,1))
     #ct = ants.resample_image(ct, resample, False, 1).numpy()
@@ -367,6 +360,8 @@ print("Creating CT images for testing")
 for i, subset in enumerate(ct_files_test):
 
     ct = ants.image_read(subset).numpy()
+    # Rotate image for the second stage orientation
+    ct = np.rot90(ct, axes = (0,1))
     #ct = ants.resample_image(ct, resample, False, 1).numpy()
     ct, mask = get_3d_mask(ct, min_=min_ct,th=th_ct, max_=max_ct)
     ct, mask = crop_scan(ct, mask, crop, crop_h, ignore_zero=False)

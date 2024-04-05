@@ -41,13 +41,13 @@ for phase in ['train', 'val', 'test']:
     # Create output folder
     os.makedirs(args.intermediate_voxels_folder + phase)
 
-    # Group images
+    # Identify the voxels id
+    voxels_idx = np.unique([img[0:3] for img in sct_images if 'paired' not in img])
+    # Identify the paired voxels id
     if phase == 'train':
         voxels_pairs_idx = np.unique([img[0:10] for img in sct_images if 'paired' in img])
-    voxels_idx = np.unique([img[0:3] for img in sct_images if 'paired' not in img])
-
-    # Merge idxs
-    voxels_idx = np.concatenate((voxels_pairs_idx,voxels_idx))
+        # Merge idxs
+        voxels_idx = np.concatenate((voxels_pairs_idx,voxels_idx))
 
     # Create voxels 1 by 1
     for voxel_idx in voxels_idx:
@@ -89,6 +89,10 @@ for phase in ['train', 'val', 'test']:
                 image3d = np.concatenate((image3d,image_array), axis = 0)
 
             #image3d[index_insert_brain+idx, :, :] =  image_array
+
+        # Rotate to get the proper orientation
+        image3d = np.rot90(image3d, axes = (2, 1))
+        image3d = np.flip(image3d, axis = 0)
 
         # Create a NIfTI image
         nifti_img = nib.Nifti1Image(image3d, affine=np.diag([1, 1, 1, 1]))  # Assuming an identity affine matrix

@@ -38,16 +38,16 @@ def validate(val_set, model):
     # Getting MSE
     metric_mse = torch.nn.MSELoss()
     # Getting SSIM
-    metric_ssim = StructuralSimilarityIndexMeasure(data_range=1.0)
+    metric_ssim = StructuralSimilarityIndexMeasure()
     # Getting PSNR
     metric_psnr = PeakSignalNoiseRatio()
 
     model.eval()
     # Set zero
-    mae = 0
-    mse = 0
-    ssim = 0
-    psnr = 0
+    mae = 0.0
+    mse = 0.0
+    ssim = 0.0
+    psnr = 0.0
     for i, data in enumerate(val_set):  # inner loop within one epoch
         model.set_input(data)         # unpack data from dataset and apply preprocessing
         model.test()   # calculate loss functions, get gradients, update network weights
@@ -55,6 +55,16 @@ def validate(val_set, model):
         mri = visuals['real_A']
         real = visuals['real_B']
         pred = visuals['fake_B']
+
+        # Converting values from floating (-1, 1) to 8-bytes integer (0,255)
+        # Assuming normalization was done using mean = 0.5, std = 0.5
+        mri = mri * 0.5 + 0.5
+        mri = (mri * 255)
+        real = real * 0.5 + 0.5
+        real = (real * 255)
+        pred = pred * 0.5 + 0.5
+        pred = (pred * 255)
+
         mae += metric_mae(pred.cpu(), real.cpu())
         mse += metric_mse(pred.cpu(), real.cpu())
         ssim += metric_ssim(pred.cpu(), real.cpu())
@@ -64,7 +74,7 @@ def validate(val_set, model):
         #     # Save real
         #     image_wandb_real = real.cpu().numpy()
         #     image_wandb_real = np.concatenate(image_wandb_real, axis=1)
-        #     image_wandb_real = ((image_wandb_real + 1) * 127.5).astype(np.uint8)
+        #     image_wandb_real = ((image_wandb_real + 1) * 127.5).astype(np.uint8)22
         #     image_wandb_real = PIL.Image.fromarray(np.squeeze(image_wandb_real))
         #     image_wandb_real = image_wandb_real.convert("L")
 

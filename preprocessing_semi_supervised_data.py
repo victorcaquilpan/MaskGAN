@@ -104,7 +104,6 @@ def save_slice(img, mask, data_dir, data_mask_dir, filename):
         #im = np.uint8(255*normalize(img[i]))
         im = img[i]
         m = 255*mask[i].astype(np.uint8)
-        
         # Remove noise
         kernel = np.ones((10,10), np.uint8) # Define the kernel size
         dilated_mask = cv2.dilate(m.astype(np.uint8), kernel, iterations = 2)
@@ -117,11 +116,11 @@ def save_slice(img, mask, data_dir, data_mask_dir, filename):
 print("Defining main directories")
 
 ### TRAIN
-out_dir = '../../data/structured-data-solved-mixed-removingwarped-2d'
+out_dir = '../../data/structured-data-registered-2d'
 
-train_root =  '../../data/structured-data-solved-mixed-removingwarped-3d/train/'
-val_root =  '../../data/structured-data-solved-mixed-removingwarped-3d/val/'
-test_root =  '../../data/structured-data-solved-mixed-removingwarped-3d/test/'
+train_root =  '../../data/structured-data-registered-3d/train/'
+val_root =  '../../data/structured-data-registered-3d/val/'
+test_root =  '../../data/structured-data-registered-3d/test/'
 
 train_ct = train_root + 'ct/*.nii'
 train_mri = train_root + 'mri/*.nii'
@@ -150,7 +149,7 @@ mri_files_train = glob.glob(train_mri)
 th_ct = 50
 th_mri = 10
 # Set clip CT intensity
-min_ct, max_ct = -1000, 2000
+min_ct, max_ct = -800, 2000
 #th = 10 # Consider pixel less than certain threshold as background (remove noise, artifacts)
 
 results = 'vis'
@@ -196,7 +195,6 @@ for idx, filepath in enumerate(ct_files_train):
     # if '0db9b48e-2903-41a8-95f2-8f4a710d45ab_Thin_Bone' in filepath:
     #     img = np.transpose(img, (1, 0, 2))
     #filename = os.path.splitext(os.path.basename(filepath))[0]
-
     ct, mask = get_3d_mask(ct, min_=min_ct, max_=max_ct, th=th_ct)
     # Our scans have irregular size, crop to adjust, comment out as needed
     ct, mask = crop_scan(ct, mask, crop,crop_h)
@@ -250,7 +248,6 @@ for i, subset in enumerate(mri_files_val):
     filename = subset.split('/')[-1].replace('.nii','')
     # Create a generic format
     filename = filename.zfill(3)
-
     save_slice(mri, mask, output_mri_dir, output_mri_mask_dir,  filename)
 
 print("Creating CT images for validation")

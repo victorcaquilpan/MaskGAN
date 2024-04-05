@@ -43,8 +43,6 @@ def error(target_dir, fake_dir) :
     mae = np.mean(np.absolute((real_images.astype("float") - fake_images.astype("float"))))
     return ssim, mae, psnr
 
-
-
 def inception_score(fake_dir) :
     filenames = glob(os.path.join(fake_dir, '*.*'))
     images = [get_images(filename, channels=3, size=299) for filename in filenames]

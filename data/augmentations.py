@@ -20,6 +20,8 @@ class Compose:
         for transform in self.transforms:
             img, mask = transform(img, mask)
         new_mask = torch.zeros(mask.shape)
+
+        # Reversing mask values to the background attention in MaskGAN
         bg_value = 1.0
         new_mask[mask == 255] = 1 - bg_value
         new_mask[mask == 0] = bg_value
@@ -73,11 +75,13 @@ class Normalize:
         self.std = std
 
     def __call__(self, img: Tensor, mask: Tensor) -> Tuple[Tensor, Tensor]:
+
         # import cv2
         # cv2.imwrite('test.png', img.permute(1,2,0).numpy())
         img = img.float()
         img /= 255
         img = TF.normalize(img, self.mean, self.std)
+
         return img, mask
 
 

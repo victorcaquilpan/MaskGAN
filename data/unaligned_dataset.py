@@ -92,7 +92,10 @@ class UnalignedDataset(BaseDataset):
             padding_mode="zeros")
         
         # To force testing over train set
-        self.force_testing = opt.force_testing
+        try:
+            self.force_testing = opt.force_testing
+        except:
+            self.force_testing = False
 
     def __getitem__(self, index):
         """Return a data point and its metadata information.
