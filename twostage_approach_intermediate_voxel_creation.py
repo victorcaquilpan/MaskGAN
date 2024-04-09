@@ -9,7 +9,8 @@ import shutil
 # Call the parser
 parser = argparse.ArgumentParser()
 parser.add_argument('--intermediate_results_folder', default='twostage_intermediate_results/semi-supervised-cleaned-paired-new-mask/', help='path to intermediate results (1rst stage)')
-parser.add_argument('--intermediate_voxels_folder', default='../../data/two_stage_approach/intermediate_voxels/semi-supervised-cleaned-paired-imgs/', help='path to leave input of 2nd stage')
+#parser.add_argument('--intermediate_voxels_folder', default='../../data/two_stage_approach/intermediate_voxels/semi-supervised-cleaned-paired-imgs/', help='path to leave input of 2nd stage')
+parser.add_argument('--intermediate_voxels_folder', default='../../data/two_stage_approach/intermediate_voxels/testing/', help='path to leave input of 2nd stage')
 parser.add_argument('--size_input', default=224, help='length of sides of input image')
 args = parser.parse_args()
 
@@ -27,7 +28,7 @@ if os.path.exists(args.intermediate_voxels_folder):
 # Create output folder
 os.makedirs(args.intermediate_voxels_folder)
 
-for phase in ['train', 'val', 'test']:
+for phase in ['test']:
 
     # Define main subdirectories
     sct_folder = args.intermediate_results_folder + phase +'/'
@@ -69,7 +70,7 @@ for phase in ['train', 'val', 'test']:
         images_voxel = len(sorted_slicing_names)
 
         # To ensure to insert the image in the middle of the template, we need to identify from which index, we need to include the images
-        index_insert_brain = (args.size_input - images_voxel) // 2 
+        #index_insert_brain = (args.size_input - images_voxel) // 2 
 
         # Concatenate 2D Slices
         for idx, img in enumerate(sorted_slicing_names):

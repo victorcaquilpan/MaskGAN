@@ -41,7 +41,6 @@ def normalize(img, min_=None, max_=None):
         max_ = img.max()
     return (img - min_)/(max_ - min_)
 
-
 def crop_scan(img, mask, crop=0, crop_h=0, ignore_zero=True):
     img = np.transpose(img, (0,2,1))[:,::-1,::-1]
     if mask is not None:
@@ -116,11 +115,11 @@ def save_slice(img, mask, data_dir, data_mask_dir, filename):
 print("Defining main directories")
 
 ### TRAIN
-out_dir = '../../data/structured-data-registered-2d'
+out_dir = '../../data/structured-data-registered-2d-1mm-solved'
 
-train_root =  '../../data/structured-data-registered-3d/train/'
-val_root =  '../../data/structured-data-registered-3d/val/'
-test_root =  '../../data/structured-data-registered-3d/test/'
+train_root =  '../../data/structured-data-registered-3d-1mm/train/'
+val_root =  '../../data/structured-data-registered-3d-1mm/val/'
+test_root =  '../../data/structured-data-registered-3d-1mm/test/'
 
 train_ct = train_root + 'ct/*.nii'
 train_mri = train_root + 'mri/*.nii'
@@ -157,12 +156,13 @@ os.makedirs(results, exist_ok=True)
 
 crop = 0.0
 crop_h = 0.9
+resample = [1.0, 1.0, 1.0]
 
 print("Creating MR images for training")
 for idx, filepath in enumerate(mri_files_train):
 
-    mri = ants.image_read(filepath).numpy()
-    #mri = ants.resample_image(mri, resample, False, 1).numpy()
+    mri = ants.image_read(filepath)
+    mri = ants.resample_image(mri, resample, False, 1).numpy()
     #filename = os.path.splitext(os.path.basename(filepath))[0]
     mri, mask = get_3d_mask(mri, min_=0, th=th_mri, width=10)
     # Our scans have irregular size, crop to adjust, comment out as needed
@@ -172,6 +172,14 @@ for idx, filepath in enumerate(mri_files_train):
     non_zero_slices_mask = np.any(mask, axis=(1, 2))
     mri = mri[non_zero_slices_mask]
     mask = mask[non_zero_slices_mask]
+
+    non_zero_slices_mask = np.any(mask, axis=(0, 1))
+    mri = mri[:,:,non_zero_slices_mask]
+    mask = mask[:,:,non_zero_slices_mask]
+
+    non_zero_slices_mask = np.any(mask, axis=(0, 2))
+    mri = mri[:,non_zero_slices_mask,:]
+    mask = mask[:,non_zero_slices_mask,:]
 
     # Enter the name of the file
     filename = filepath.split('/')[-1].replace('.nii','')
@@ -190,8 +198,8 @@ for idx, filepath in enumerate(mri_files_train):
 print("Creating CT images for training")
 for idx, filepath in enumerate(ct_files_train): 
 
-    ct = ants.image_read(filepath).numpy()
-    #ct = ants.resample_image(ct, resample, False, 1).numpy()
+    ct = ants.image_read(filepath)
+    ct = ants.resample_image(ct, resample, False, 1).numpy()
     # if '0db9b48e-2903-41a8-95f2-8f4a710d45ab_Thin_Bone' in filepath:
     #     img = np.transpose(img, (1, 0, 2))
     #filename = os.path.splitext(os.path.basename(filepath))[0]
@@ -203,6 +211,14 @@ for idx, filepath in enumerate(ct_files_train):
     non_zero_slices_mask = np.any(mask, axis=(1, 2))
     ct = ct[non_zero_slices_mask]
     mask = mask[non_zero_slices_mask]
+
+    non_zero_slices_mask = np.any(mask, axis=(0, 1))
+    ct = ct[:,:,non_zero_slices_mask]
+    mask = mask[:,:,non_zero_slices_mask]
+
+    non_zero_slices_mask = np.any(mask, axis=(0, 2))
+    ct = ct[:,non_zero_slices_mask,:]
+    mask = mask[:,non_zero_slices_mask,:]
 
     # Enter the name of the file
     filename = filepath.split('/')[-1].replace('.nii','')
@@ -235,14 +251,22 @@ mri_files_val = glob.glob(val_mri)
 print("Creating MRI images for validation")
 for i, subset in enumerate(mri_files_val):
 
-    mri = ants.image_read(subset).numpy()
-    #mri = ants.resample_image(mri, resample, False, 1).numpy()
+    mri = ants.image_read(subset)
+    mri = ants.resample_image(mri, resample, False, 1).numpy()
     mri, mask = get_3d_mask(mri, min_=0, th=th_mri, width=10)
     mri, mask = crop_scan(mri, mask, crop, crop_h, ignore_zero=False)
     # Remove images with zero values in the mask
     non_zero_slices_mask = np.any(mask, axis=(1, 2))
     mri = mri[non_zero_slices_mask]
     mask = mask[non_zero_slices_mask]
+
+    non_zero_slices_mask = np.any(mask, axis=(0, 1))
+    mri = mri[:,:,non_zero_slices_mask]
+    mask = mask[:,:,non_zero_slices_mask]
+
+    non_zero_slices_mask = np.any(mask, axis=(0, 2))
+    mri = mri[:,non_zero_slices_mask,:]
+    mask = mask[:,non_zero_slices_mask,:]
 
     # Enter the name of the file
     filename = subset.split('/')[-1].replace('.nii','')
@@ -253,8 +277,8 @@ for i, subset in enumerate(mri_files_val):
 print("Creating CT images for validation")
 for i, subset in enumerate(ct_files_val):
 
-    ct = ants.image_read(subset).numpy()
-    #ct = ants.resample_image(ct, resample, False, 1).numpy()
+    ct = ants.image_read(subset)
+    ct = ants.resample_image(ct, resample, False, 1).numpy()
     ct, mask = get_3d_mask(ct, min_=min_ct,th=th_ct, max_=max_ct)
     ct, mask = crop_scan(ct, mask, crop, crop_h, ignore_zero=False)
 
@@ -263,13 +287,20 @@ for i, subset in enumerate(ct_files_val):
     ct = ct[non_zero_slices_mask]
     mask = mask[non_zero_slices_mask]
 
+    non_zero_slices_mask = np.any(mask, axis=(0, 1))
+    ct = ct[:,:,non_zero_slices_mask]
+    mask = mask[:,:,non_zero_slices_mask]
+
+    non_zero_slices_mask = np.any(mask, axis=(0, 2))
+    ct = ct[:,non_zero_slices_mask,:]
+    mask = mask[:,non_zero_slices_mask,:]
+
     # Enter the name of the file
     filename = subset.split('/')[-1].replace('.nii','')
     # Create a generic format
     filename = filename.zfill(3)
 
     save_slice(ct, mask, output_ct_dir, output_ct_mask_dir, filename)
-
 
 ### TESTING
 output_ct_dir = f'{out_dir}/test_B'
@@ -288,14 +319,22 @@ mri_files_test = glob.glob(test_mri)
 print("Creating MRI images for testing")
 for i, subset in enumerate(mri_files_test):
 
-    mri = ants.image_read(subset).numpy()
-    #mri = ants.resample_image(mri, resample, False, 1).numpy()
+    mri = ants.image_read(subset)
+    mri = ants.resample_image(mri, resample, False, 1).numpy()
     mri, mask = get_3d_mask(mri, min_=0, th=th_mri, width=10)
     mri, mask = crop_scan(mri, mask, crop, crop_h, ignore_zero=False)
     # Remove images with zero values in the mask
     non_zero_slices_mask = np.any(mask, axis=(1, 2))
     mri = mri[non_zero_slices_mask]
     mask = mask[non_zero_slices_mask]
+
+    non_zero_slices_mask = np.any(mask, axis=(0, 1))
+    mri = mri[:,:,non_zero_slices_mask]
+    mask = mask[:,:,non_zero_slices_mask]
+
+    non_zero_slices_mask = np.any(mask, axis=(0, 2))
+    mri = mri[:,non_zero_slices_mask,:]
+    mask = mask[:,non_zero_slices_mask,:]
 
     # Enter the name of the file
     filename = subset.split('/')[-1].replace('.nii','')
@@ -307,8 +346,8 @@ for i, subset in enumerate(mri_files_test):
 print("Creating CT images for testing")
 for i, subset in enumerate(ct_files_test):
 
-    ct = ants.image_read(subset).numpy()
-    #ct = ants.resample_image(ct, resample, False, 1).numpy()
+    ct = ants.image_read(subset)
+    ct = ants.resample_image(ct, resample, False, 1).numpy()
     ct, mask = get_3d_mask(ct, min_=min_ct,th=th_ct, max_=max_ct)
     ct, mask = crop_scan(ct, mask, crop, crop_h, ignore_zero=False)
 
@@ -316,6 +355,14 @@ for i, subset in enumerate(ct_files_test):
     non_zero_slices_mask = np.any(mask, axis=(1, 2))
     ct = ct[non_zero_slices_mask]
     mask = mask[non_zero_slices_mask]
+
+    non_zero_slices_mask = np.any(mask, axis=(0, 1))
+    ct = ct[:,:,non_zero_slices_mask]
+    mask = mask[:,:,non_zero_slices_mask]
+
+    non_zero_slices_mask = np.any(mask, axis=(0, 2))
+    ct = ct[:,non_zero_slices_mask,:]
+    mask = mask[:,non_zero_slices_mask,:]
 
     # Enter the name of the file
     filename = subset.split('/')[-1].replace('.nii','')

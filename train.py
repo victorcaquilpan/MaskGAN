@@ -58,12 +58,12 @@ def validate(val_set, model):
 
         # Converting values from floating (-1, 1) to 8-bytes integer (0,255)
         # Assuming normalization was done using mean = 0.5, std = 0.5
-        mri = mri * 0.5 + 0.5
-        mri = (mri * 255)
-        real = real * 0.5 + 0.5
-        real = (real * 255)
-        pred = pred * 0.5 + 0.5
-        pred = (pred * 255)
+#        mri = mri * 0.5 + 0.5
+#        mri = (mri * 255)
+#        real = real * 0.5 + 0.5
+#        real = (real * 255)
+#        pred = pred * 0.5 + 0.5
+#        pred = (pred * 255)
 
         mae += metric_mae(pred.cpu(), real.cpu())
         mse += metric_mse(pred.cpu(), real.cpu())
