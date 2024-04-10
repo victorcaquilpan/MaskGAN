@@ -178,10 +178,6 @@ class UnalignedDataset(BaseDataset):
         # apply image transformation to standarize data
         A, A_mask = self.transform_A(A_img, A_mask)
         B, B_mask = self.transform_B(B_img, B_mask)
-
-        import matplotlib.pyplot as plt
-        plt.imsave("fAA.jpg",np.array(A[0,:,:].cpu().detach()),cmap = "gray")
-        plt.imsave("fBB.jpg",np.array(B[0,:,:].cpu().detach()),cmap = "gray")
         # A_mask = self.transform_maskA(A_mask)
         # B_mask = self.transform_maskB(B_mask)
 
