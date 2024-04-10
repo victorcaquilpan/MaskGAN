@@ -7,7 +7,6 @@ from typing import Tuple, List, Union, Tuple, Optional
 import torchvision
 import scipy.stats as st
 
-
 class Compose:
     def __init__(self, transforms: list) -> None:
         self.transforms = transforms

@@ -100,8 +100,7 @@ def get_transform(opt, params=None, grayscale=True, method=Image.BICUBIC, conver
 
     if not opt.no_flip:
         transform_list.append(aug.RandomHorizontalFlip())
-
-
+    
     if convert:
         #transform_list += [transforms.ToTensor()]
         if not mask:

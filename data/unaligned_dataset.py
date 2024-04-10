@@ -98,6 +98,7 @@ class UnalignedDataset(BaseDataset):
             self.force_testing = False
 
     def __getitem__(self, index):
+
         """Return a data point and its metadata information.
 
         Parameters:
@@ -109,7 +110,7 @@ class UnalignedDataset(BaseDataset):
             A_paths (str)    -- image paths
             B_paths (str)    -- image paths
         """
-           
+        
         #A_path = self.A_paths[index_A]  # make sure index is within then range
 
         # If we have paired data in our set, we want to be sure that we are picking up a ratio of 50:50. Otherwise, don't consider this condition
@@ -178,6 +179,9 @@ class UnalignedDataset(BaseDataset):
         A, A_mask = self.transform_A(A_img, A_mask)
         B, B_mask = self.transform_B(B_img, B_mask)
 
+        import matplotlib.pyplot as plt
+        plt.imsave("fAA.jpg",np.array(A[0,:,:].cpu().detach()),cmap = "gray")
+        plt.imsave("fBB.jpg",np.array(B[0,:,:].cpu().detach()),cmap = "gray")
         # A_mask = self.transform_maskA(A_mask)
         # B_mask = self.transform_maskB(B_mask)
 

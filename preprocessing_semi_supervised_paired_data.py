@@ -66,6 +66,38 @@ def crop_scan(img, mask, crop=0, crop_h=0, ignore_zero=True):
 
     return img, mask
 
+
+def crop_scan_paired(img1, img2, mask, crop=0, crop_h=0, ignore_zero=True):
+    img1 = np.transpose(img1, (0,2,1))[:,::-1,::-1]
+    img2 = np.transpose(img2, (0,2,1))[:,::-1,::-1]
+    if mask is not None:
+        mask = np.transpose(mask, (0,2,1))[:,::-1,::-1]
+    if ignore_zero:
+        mask1_ = img1.sum(axis=(1,2)) > 0
+        mask2_ = img2.sum(axis=(1,2)) > 0
+        mask_ = mask1_ * mask2_
+        img1 = img1[mask_]
+        img2 = img2[mask_]
+        if mask is not None:
+            mask = mask[mask_]
+    if crop > 0:
+        length = img1.shape[0]
+        img1 = img1[int(crop*length): int((1-crop)*length)]
+        img2 = img2[int(crop*length): int((1-crop)*length)]
+        if mask is not None:
+            mask = mask[int(crop*length): int((1-crop)*length)]
+    
+    if crop_h > 0:
+        if img1.shape[1] > 200:
+            crop_h = 0.8
+        new_h = int(crop_h*img1.shape[1])
+        img1 = img1[:, :new_h]
+        img2 = img2[:, :new_h]
+        if mask is not None:
+            mask = mask[:, :new_h]
+
+    return img1, img2, mask
+
 def getLargestCC(segmentation):
     labels = label(segmentation)
     assert( labels.max() != 0 ) # assume at least 1 CC
@@ -116,11 +148,11 @@ print("Defining main directories")
 
 ### TRAIN
 #out_dir = '../../data/structured-data-registered-2d-1mm-solved'
-out_dir = '../../data/testing'
+out_dir = '../../data/data-2d'
 
-train_root =  '../../data/structured-data-registered-3d-1mm/train/'
-val_root =  '../../data/structured-data-registered-3d-1mm/val/'
-test_root =  '../../data/structured-data-registered-3d-1mm/test/'
+train_root =  '../../data/data-3d/train/'
+val_root =  '../../data/data-3d/val/'
+test_root =  '../../data/data-3d/test/'
 
 train_ct = train_root + 'ct/*.nii'
 train_mri = train_root + 'mri/*.nii'
@@ -159,10 +191,64 @@ crop = 0.0
 crop_h = 0.9
 resample = [1.0, 1.0, 1.0]
 
+
+# Sort the paired dataset
+print("Creating the paired images for training")
+mri_paired_files_train = [path for path in mri_files_train if 'paired' in path]
+ct_paired_files_train = [path for path in ct_files_train if 'paired' in path]
+
+for mri_path, ct_path in zip(mri_paired_files_train,ct_paired_files_train):
+
+    mri = ants.image_read(mri_path)
+    mri = ants.resample_image(mri, resample, False, 1).numpy()
+    #filename = os.path.splitext(os.path.basename(filepath))[0]
+    mri, mri_mask = get_3d_mask(mri, min_=0, th=th_mri, width=10)
+
+    ct = ants.image_read(ct_path)
+    ct = ants.resample_image(ct, resample, False, 1).numpy()
+    ct, ct_mask = get_3d_mask(ct, min_=min_ct, max_=max_ct, th=th_ct)
+
+    # Getting a uniform mask template for paired images
+    uniform_mask = mri_mask * ct_mask
+
+    # Our scans have irregular size, crop to adjust, comment out as needed
+    mri, ct, uniform_mask = crop_scan_paired(mri, ct, uniform_mask, crop,crop_h)
+
+    # Remove images with zero values in the mask
+    non_zero_slices_mask_axis1_2 = np.any(uniform_mask, axis=(1, 2))
+    mri = mri[non_zero_slices_mask_axis1_2]
+    ct = ct[non_zero_slices_mask_axis1_2]
+    uniform_mask = uniform_mask[non_zero_slices_mask_axis1_2]
+    non_zero_slices_mask_axis0_1 = np.any(uniform_mask, axis=(0, 1))
+    mri = mri[:,:,non_zero_slices_mask_axis0_1]
+    ct = ct[:,:,non_zero_slices_mask_axis0_1]
+    uniform_mask = uniform_mask[:,:,non_zero_slices_mask_axis0_1]
+    non_zero_slices_mask_axis0_2 = np.any(uniform_mask, axis=(0, 2))
+    mri = mri[:,non_zero_slices_mask_axis0_2,:]
+    ct = ct[:,non_zero_slices_mask_axis0_2,:]
+    uniform_mask = uniform_mask[:,non_zero_slices_mask_axis0_2,:]
+
+    # Enter the name of the file
+    filename_mri = mri_path.split('/')[-1].replace('.nii','')
+    # Create a generic format
+    paired, number = filename_mri.split('_')
+    filename_mri = paired + "_" + number.zfill(3)
+    
+    save_slice(mri, uniform_mask, output_mri_dir, output_mri_mask_dir, filename_mri)
+    save_slice(ct, uniform_mask, output_ct_dir, output_ct_mask_dir, filename_mri)
+    
+    visualize(mri, f'{results}/mri')
+    visualize(uniform_mask, f'{results}/mri_mask')
+
+    visualize(ct, f'{results}/ct')
+    visualize(uniform_mask, f'{results}/ct_mask')
+
+# Removing the pairing images
+mri_files_train = [path for path in mri_files_train if 'paired' not in path]
+ct_files_train = [path for path in ct_files_train if 'paired' not in path]
+
 print("Creating MR images for training")
 for idx, filepath in enumerate(mri_files_train):
-
-    s = 0
 
     mri = ants.image_read(filepath)
     mri = ants.resample_image(mri, resample, False, 1).numpy()
@@ -185,12 +271,7 @@ for idx, filepath in enumerate(mri_files_train):
     # Enter the name of the file
     filename = filepath.split('/')[-1].replace('.nii','')
     # Create a generic format
-    if 'paired' in filename:
-        paired, number = filename.split('_')
-        filename = paired + "_" + number.zfill(3)
-    else:
-        filename = filename.zfill(3)
-
+    filename = filename.zfill(3)
     save_slice(mri, mask, output_mri_dir, output_mri_mask_dir, filename)
     
     visualize(mri, f'{results}/mri')
@@ -201,9 +282,6 @@ for idx, filepath in enumerate(ct_files_train):
 
     ct = ants.image_read(filepath)
     ct = ants.resample_image(ct, resample, False, 1).numpy()
-    # if '0db9b48e-2903-41a8-95f2-8f4a710d45ab_Thin_Bone' in filepath:
-    #     img = np.transpose(img, (1, 0, 2))
-    #filename = os.path.splitext(os.path.basename(filepath))[0]
     ct, mask = get_3d_mask(ct, min_=min_ct, max_=max_ct, th=th_ct)
     # Our scans have irregular size, crop to adjust, comment out as needed
     ct, mask = crop_scan(ct, mask, crop,crop_h)
@@ -224,16 +302,12 @@ for idx, filepath in enumerate(ct_files_train):
     # Enter the name of the file
     filename = filepath.split('/')[-1].replace('.nii','')
     # Create a generic format
-    if 'paired' in filename:
-        paired, number = filename.split('_')
-        filename = paired + "_" + number.zfill(3)
-    else:
-        filename = filename.zfill(3)
+    filename = filename.zfill(3)
 
     save_slice(ct, mask, output_ct_dir, output_ct_mask_dir, filename)
     visualize(ct, f'{results}/ct')
     visualize(mask, f'{results}/ct_mask')   
-     
+
 ### VALIDATION
 output_ct_dir = f'{out_dir}/val_B'
 output_mri_dir = f'{out_dir}/val_A'
@@ -248,59 +322,45 @@ os.makedirs(output_mri_mask_dir, exist_ok=True)
 ct_files_val = glob.glob(val_ct)
 mri_files_val = glob.glob(val_mri)
 
-print("Creating MRI images for validation")
-for i, subset in enumerate(mri_files_val):
+print("Creating MRI images and CT scans for validation")
+for mri_path, ct_path in zip(mri_files_val,ct_files_val):
 
-    mri = ants.image_read(subset)
+    mri = ants.image_read(mri_path)
     mri = ants.resample_image(mri, resample, False, 1).numpy()
-    mri, mask = get_3d_mask(mri, min_=0, th=th_mri, width=10)
-    mri, mask = crop_scan(mri, mask, crop, crop_h, ignore_zero=False)
-    # Remove images with zero values in the mask
-    non_zero_slices_mask_axis1_2 = np.any(mask, axis=(1, 2))
-    mri = mri[non_zero_slices_mask_axis1_2]
-    mask = mask[non_zero_slices_mask_axis1_2]
+    #filename = os.path.splitext(os.path.basename(filepath))[0]
+    mri, mri_mask = get_3d_mask(mri, min_=0, th=th_mri, width=10)
 
-    non_zero_slices_mask_axis0_1 = np.any(mask, axis=(0, 1))
-    mri = mri[:,:,non_zero_slices_mask_axis0_1]
-    mask = mask[:,:,non_zero_slices_mask_axis0_1]
-
-    non_zero_slices_mask_axis0_2 = np.any(mask, axis=(0, 2))
-    mri = mri[:,non_zero_slices_mask_axis0_2,:]
-    mask = mask[:,non_zero_slices_mask_axis0_2,:]
-
-    # Enter the name of the file
-    filename = subset.split('/')[-1].replace('.nii','')
-    # Create a generic format
-    filename = filename.zfill(3)
-    save_slice(mri, mask, output_mri_dir, output_mri_mask_dir,  filename)
-
-print("Creating CT images for validation")
-for i, subset in enumerate(ct_files_val):
-
-    ct = ants.image_read(subset)
+    ct = ants.image_read(ct_path)
     ct = ants.resample_image(ct, resample, False, 1).numpy()
-    ct, mask = get_3d_mask(ct, min_=min_ct,th=th_ct, max_=max_ct)
-    ct, mask = crop_scan(ct, mask, crop, crop_h, ignore_zero=False)
+    ct, ct_mask = get_3d_mask(ct, min_=min_ct, max_=max_ct, th=th_ct)
+
+    # Getting a uniform mask template for paired images
+    uniform_mask = mri_mask * ct_mask
+
+    # Our scans have irregular size, crop to adjust, comment out as needed
+    mri, ct, uniform_mask = crop_scan_paired(mri, ct, uniform_mask, crop,crop_h)
 
     # Remove images with zero values in the mask
-    non_zero_slices_mask_axis1_2 = np.any(mask, axis=(1, 2))
+    non_zero_slices_mask_axis1_2 = np.any(uniform_mask, axis=(1, 2))
+    mri = mri[non_zero_slices_mask_axis1_2]
     ct = ct[non_zero_slices_mask_axis1_2]
-    mask = mask[non_zero_slices_mask_axis1_2]
-
-    non_zero_slices_mask_axis0_1 = np.any(mask, axis=(0, 1))
+    uniform_mask = uniform_mask[non_zero_slices_mask_axis1_2]
+    non_zero_slices_mask_axis0_1 = np.any(uniform_mask, axis=(0, 1))
+    mri = mri[:,:,non_zero_slices_mask_axis0_1]
     ct = ct[:,:,non_zero_slices_mask_axis0_1]
-    mask = mask[:,:,non_zero_slices_mask_axis0_1]
-
-    non_zero_slices_mask_axis0_2 = np.any(mask, axis=(0, 2))
+    uniform_mask = uniform_mask[:,:,non_zero_slices_mask_axis0_1]
+    non_zero_slices_mask_axis0_2 = np.any(uniform_mask, axis=(0, 2))
+    mri = mri[:,non_zero_slices_mask_axis0_2,:]
     ct = ct[:,non_zero_slices_mask_axis0_2,:]
-    mask = mask[:,non_zero_slices_mask_axis0_2,:]
+    uniform_mask = uniform_mask[:,non_zero_slices_mask_axis0_2,:]
 
     # Enter the name of the file
-    filename = subset.split('/')[-1].replace('.nii','')
+    filename = mri_path.split('/')[-1].replace('.nii','')
     # Create a generic format
     filename = filename.zfill(3)
-
-    save_slice(ct, mask, output_ct_dir, output_ct_mask_dir, filename)
+    
+    save_slice(mri, uniform_mask, output_mri_dir, output_mri_mask_dir, filename)
+    save_slice(ct, uniform_mask, output_ct_dir, output_ct_mask_dir, filename)
 
 ### TESTING
 output_ct_dir = f'{out_dir}/test_B'
@@ -313,61 +373,45 @@ os.makedirs(output_mri_dir, exist_ok=True)
 os.makedirs(output_ct_mask_dir, exist_ok=True)
 os.makedirs(output_mri_mask_dir, exist_ok=True)
 
-ct_files_test = glob.glob(test_ct)
 mri_files_test = glob.glob(test_mri)
+ct_files_test = glob.glob(test_ct)
 
-print("Creating MRI images for testing")
-for i, subset in enumerate(mri_files_test):
+print("Creating MRI images and CT scans for testing")
+for mri_path, ct_path in zip(mri_files_test,ct_files_test):
 
-    mri = ants.image_read(subset)
+    mri = ants.image_read(mri_path)
     mri = ants.resample_image(mri, resample, False, 1).numpy()
-    mri, mask = get_3d_mask(mri, min_=0, th=th_mri, width=10)
-    mri, mask = crop_scan(mri, mask, crop, crop_h, ignore_zero=False)
-    # Remove images with zero values in the mask
-    non_zero_slices_mask_axis1_2 = np.any(mask, axis=(1, 2))
-    mri = mri[non_zero_slices_mask_axis1_2]
-    mask = mask[non_zero_slices_mask_axis1_2]
+    #filename = os.path.splitext(os.path.basename(filepath))[0]
+    mri, mri_mask = get_3d_mask(mri, min_=0, th=th_mri, width=10)
 
-    non_zero_slices_mask_axis0_1 = np.any(mask, axis=(0, 1))
-    mri = mri[:,:,non_zero_slices_mask_axis0_1]
-    mask = mask[:,:,non_zero_slices_mask_axis0_1]
-
-    non_zero_slices_mask_axis0_2 = np.any(mask, axis=(0, 2))
-    mri = mri[:,non_zero_slices_mask_axis0_2,:]
-    mask = mask[:,non_zero_slices_mask_axis0_2,:]
-
-    # Enter the name of the file
-    filename = subset.split('/')[-1].replace('.nii','')
-    # Create a generic format
-    filename = filename.zfill(3)
-
-    save_slice(mri, mask, output_mri_dir, output_mri_mask_dir,  filename)
-
-print("Creating CT images for testing")
-for i, subset in enumerate(ct_files_test):
-
-    ct = ants.image_read(subset)
+    ct = ants.image_read(ct_path)
     ct = ants.resample_image(ct, resample, False, 1).numpy()
-    ct, mask = get_3d_mask(ct, min_=min_ct,th=th_ct, max_=max_ct)
-    ct, mask = crop_scan(ct, mask, crop, crop_h, ignore_zero=False)
+    ct, ct_mask = get_3d_mask(ct, min_=min_ct, max_=max_ct, th=th_ct)
+
+    # Getting a uniform mask template for paired images
+    uniform_mask = mri_mask * ct_mask
+
+    # Our scans have irregular size, crop to adjust, comment out as needed
+    mri, ct, uniform_mask = crop_scan_paired(mri, ct, uniform_mask, crop,crop_h)
 
     # Remove images with zero values in the mask
-    non_zero_slices_mask_axis1_2 = np.any(mask, axis=(1, 2))
+    non_zero_slices_mask_axis1_2 = np.any(uniform_mask, axis=(1, 2))
+    mri = mri[non_zero_slices_mask_axis1_2]
     ct = ct[non_zero_slices_mask_axis1_2]
-    mask = mask[non_zero_slices_mask_axis1_2]
-
-    non_zero_slices_mask_axis0_1 = np.any(mask, axis=(0, 1))
+    uniform_mask = uniform_mask[non_zero_slices_mask_axis1_2]
+    non_zero_slices_mask_axis0_1 = np.any(uniform_mask, axis=(0, 1))
+    mri = mri[:,:,non_zero_slices_mask_axis0_1]
     ct = ct[:,:,non_zero_slices_mask_axis0_1]
-    mask = mask[:,:,non_zero_slices_mask_axis0_1]
-
-    non_zero_slices_mask_axis0_2 = np.any(mask, axis=(0, 2))
+    uniform_mask = uniform_mask[:,:,non_zero_slices_mask_axis0_1]
+    non_zero_slices_mask_axis0_2 = np.any(uniform_mask, axis=(0, 2))
+    mri = mri[:,non_zero_slices_mask_axis0_2,:]
     ct = ct[:,non_zero_slices_mask_axis0_2,:]
-    mask = mask[:,non_zero_slices_mask_axis0_2,:]
+    uniform_mask = uniform_mask[:,non_zero_slices_mask_axis0_2,:]
 
     # Enter the name of the file
-    filename = subset.split('/')[-1].replace('.nii','')
+    filename = mri_path.split('/')[-1].replace('.nii','')
     # Create a generic format
     filename = filename.zfill(3)
-
-    save_slice(ct, mask, output_ct_dir, output_ct_mask_dir, filename)
-
+    
+    save_slice(mri, uniform_mask, output_mri_dir, output_mri_mask_dir, filename)
+    save_slice(ct, uniform_mask, output_ct_dir, output_ct_mask_dir, filename)

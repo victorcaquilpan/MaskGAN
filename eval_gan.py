@@ -157,8 +157,6 @@ def mean_kernel_inception_distance() :
     print("mean_KID_mean : ", mean_KID_mean * 100)
     print("mean_KID_stddev : ", mean_KID_stddev * 100)
 
-
-
 parser = argparse.ArgumentParser()
 parser.add_argument('--fake-dir', type=str, help='fake directory')
 parser.add_argument('--target-dir', type=str, help='target directory')
