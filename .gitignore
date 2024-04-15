@@ -6,6 +6,8 @@ wandb
 scripts/GAN_Metrics-Tensorflow/*gz
 *png
 results
+twostage_final_results
+twostage_intermediate_results
 .vscode
 wandb
 # train.sh
