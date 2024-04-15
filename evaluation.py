@@ -9,7 +9,7 @@ from math import log10, sqrt
 
 # Loading data
 parser = argparse.ArgumentParser()
-parser.add_argument('--results', default='results/semisupervised-1mm', type=str, help='directory of results')
+parser.add_argument('--results', default='results/paired_images', type=str, help='directory of results')
 opt = parser.parse_args()
 
 # Reading images
@@ -44,8 +44,12 @@ ssim = 0
 psnr = 0
 
 # Getting the metrics for images set B
-for path_a, path_b in zip(real_B_paths, fake_B_paths):
+for idx, path in enumerate(fake_B_paths):
 
+    # Obtain the proper paths
+    path_b = path
+    path_a = path.replace('fake', 'real')
+    
     # Read images
     img_a = PIL.Image.open(opt.results + '/real_B/' + path_a)
     img_b = PIL.Image.open(opt.results + '/fake_B/' + path_b)
@@ -61,6 +65,8 @@ for path_a, path_b in zip(real_B_paths, fake_B_paths):
     # Now, we need to convert img_b to HU
     img_b = ((img_b* (2000 - (-800)))/ 255) + (-800)
     img_b = np.clip(img_b,a_min= -800, a_max= 2000)
+
+    s = 0 
 
     # Calculate metrics
     mae_val, ssim_val, psnr_val = getting_metrics(img_a,img_b)

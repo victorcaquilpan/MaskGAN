@@ -56,12 +56,10 @@ if __name__ == '__main__':
     os.makedirs(opt.results_dir + '/' + opt.name)
 
     # Define the inference for all the phases (train, val and test)
-    for phase in ['train', 'val', 'test']:    
+    for phase in ['train','val', 'test']:    
+        # We are considering serial batches
         opt.phase = phase
-        if opt.phase == 'val' or opt.phase == 'test':
-            opt.serial_batches = True
-        else:
-            opt.serial_batches = False
+        opt.serial_batches = True
         # To force testing over train, val and test sets
         opt.force_testing = True
         dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
@@ -84,6 +82,8 @@ if __name__ == '__main__':
         if os.path.exists(out_fake_ct):
             shutil.rmtree(out_fake_ct)
         os.makedirs(out_fake_ct, exist_ok=True)
+        os.makedirs(out_fake_ct + '/real_B', exist_ok=True)
+        os.makedirs(out_fake_ct + '/fake_B', exist_ok=True)
         #os.makedirs(out_fake_mri, exist_ok=True)
         #os.makedirs(out_mae, exist_ok=True)
         # test with eval mode. This only affects layers like batchnorm and dropout.
@@ -97,24 +97,33 @@ if __name__ == '__main__':
             model.set_input(data)  # unpack data from data loader
             model.test()           # run inference
             visuals = model.get_current_visuals()  # get image results
-            visuals = {'fake_B': visuals['fake_B']}
+            visuals_real = {'real_B' : visuals['real_B']}
+            visuals_fake = {'fake_B': visuals['fake_B']}
+            #visuals = {'fake_B': visuals['fake_B']}
             #visuals = visuals['fake_B']
             ## Fix background CT
             #mask = visuals['mask_A']
             #visuals['real_B'][mask == 1] = -1
             #visuals['MAE'] = torch.abs(visuals['real_B'] - visuals['fake_B'])
-
-            img_path = model.get_image_paths()     # get image paths
+            
+            # Get image paths
+            img_path_A = data['A_paths']     
+            img_path_B = data['B_paths']
+            
             if i % 5 == 0:  # save images to an HTML file
-                print('processing (%04d)-th image... %s' % (i, img_path))
-            save_intermediate_images_twostages(webpage, visuals, img_path, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize)
-        
+                print('processing (%04d)-th image... %s' % (i, img_path_A))
+            save_intermediate_images_twostages(webpage, visuals_fake, img_path_A, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize)
+            save_intermediate_images_twostages(webpage, visuals_real, img_path_B, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize)
+
         webpage.save()  # save the HTML
         print("Move images")
         ### Save results
         for filepath in glob.glob(f'{web_dir}/images/*fake_B*'):
             filename = os.path.basename(filepath)
-            shutil.copy(filepath, f'{out_fake_ct}/{filename}')
+            shutil.copy(filepath, f'{out_fake_ct}/fake_B/{filename}')
+        for filepath in glob.glob(f'{web_dir}/images/*real_B*'):
+            filename = os.path.basename(filepath)
+            shutil.copy(filepath, f'{out_fake_ct}/real_B/{filename}')
         # Remove temporal folder
         shutil.rmtree(web_dir)
         
