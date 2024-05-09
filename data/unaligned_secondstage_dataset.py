@@ -7,8 +7,9 @@ import numpy as np
 from torchvision import io
 from monai.transforms import Rand2DElasticd
 import pandas as pd
+import torch
 
-class UnalignedDataset(BaseDataset):
+class UnalignedSecondstageDataset(BaseDataset):
     """
     This dataset class can load unaligned/unpaired datasets.
 
@@ -34,17 +35,13 @@ class UnalignedDataset(BaseDataset):
         self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))   # load images from '/path/to/data/trainA'
         self.B_paths = sorted(make_dataset(self.dir_B, opt.max_dataset_size))    # load images from '/path/to/data/trainB'
 
-        # Define if you want to include paired images
-        self.include_paired_images = opt.include_paired_images
-        if not self.include_paired_images:
-            self.A_paths = [img for img in self.A_paths if 'paired'not in img]
-            self.B_paths = [img for img in self.B_paths if 'paired'not in img]
-
         self.maskA_paths = sorted(make_dataset(self.dir_maskA, opt.max_dataset_size))   # load images from '/path/to/data/trainA'
         self.maskB_paths = sorted(make_dataset(self.dir_maskB, opt.max_dataset_size))    # load images from '/path/to/data/trainB'
 
-        self.A_size = len(self.A_paths)  # get the size of dataset A
-        self.B_size = len(self.B_paths)  # get the size of dataset B
+        # Get the size of dataset A
+        self.A_size = len(self.A_paths)  
+        # Get the size of dataset B
+        self.B_size = len(self.B_paths)  
         btoA = opt.direction == 'BtoA'
         if opt.half:
             self.A_size, self.B_size = self.A_size//2, self.B_size//2
@@ -52,8 +49,8 @@ class UnalignedDataset(BaseDataset):
         
         self.input_nc = self.opt.output_nc if btoA else self.opt.input_nc       # get the number of channels of input image
         self.output_nc = self.opt.input_nc if btoA else self.opt.output_nc      # get the number of channels of output image
-        self.transform_A = get_transform(self.opt, grayscale=(self.input_nc == 1))
-        self.transform_B = get_transform(self.opt, grayscale=(self.output_nc == 1))
+        self.transform_A = get_transform(self.opt, grayscale=True)
+        self.transform_B = get_transform(self.opt, grayscale=True)
         # self.transform_maskA = get_transform(self.opt, grayscale=(self.input_nc == 1), mask=True)
         # self.transform_maskB = get_transform(self.opt, grayscale=(self.output_nc == 1), mask=True)
 
@@ -74,20 +71,17 @@ class UnalignedDataset(BaseDataset):
         self.image_names_A = [name.split('/')[-1].replace('.png','') for name in self.A_paths]
         self.image_names_B = [name.split('/')[-1].replace('.png','') for name in self.B_paths]
 
-        # Create an auxiliar list to determine if an image is paired or not
-        if not self.include_paired_images:
-            self.paired_imgs_A = ['paired' in img for img in self.image_names_A]
-            self.paired_imgs_B = ['paired' in img for img in self.image_names_B]
-
-        # List values paired/unpaired for A set
-        if not self.include_paired_images:
-            self.idx_paired_A = [idx for idx, paired in enumerate(self.paired_imgs_A) if paired == True]
-            self.idx_unpaired_A = [idx for idx, paired in enumerate(self.paired_imgs_A) if paired != True]
-
         # Extract the name of the base image
         self.base_names_A = [img.split("_")[1] if 'paired' in img else img.split("_")[0] for img in self.image_names_A]
         self.base_names_B = [img.split("_")[1] if 'paired' in img else img.split("_")[0] for img in self.image_names_B]
 
+        # Get the unique values
+        self.vol_imgsA = np.unique(self.base_names_A)
+        self.vol_imgsB = np.unique(self.base_names_B)
+
+        # Get the size of volumetric images
+        self.vol_sizeA = len(self.vol_imgsA)
+        
         # Set a margin to use images from a similar relative position
         self.position_based_range = opt.position_based_range # This is a percentage
         # Define the age range
@@ -107,25 +101,21 @@ class UnalignedDataset(BaseDataset):
             # Getting the age of each CT and MRI
             self.ages_images_A = []
             self.ages_images_B = []
-            for img in self.base_names_A:
+            for img in self.vol_imgsA:
                 age = self.feature_images.loc[(self.feature_images['new_name'] == float(img)) & (self.feature_images['Modality'] == "MR"), "PatientAgeMonths"].values
                 if age.size > 0:
                     self.ages_images_A.append(age[0])
-            for img in self.base_names_B:
+            for img in self.vol_imgsB:
                 age = self.feature_images.loc[(self.feature_images['new_name'] == float(img)) & (self.feature_images['Modality'] == "CT"), "PatientAgeMonths"].values
                 if age.size > 0:
                     self.ages_images_B.append(age[0])
-            
-        # Define MONAI transforms to augment paired images
-        self.transform_paired = Rand2DElasticd(keys = ['mri','ct', 'mri_mask', 'ct_mask'],
-            prob=0.5,
-            spacing=(100, 100),
-            magnitude_range=(1, 2),
-            rotate_range=(0.2),
-            scale_range=(0.2, 0.2),
-            padding_mode="zeros")
-        
-        
+
+        # Define a number of consecutive number of images to process
+        self.number_slices = opt.input_nc
+
+        # Check number of chunks
+        self.chunks_per_imgA = [self.base_names_A.count(img) for img in self.vol_imgsA]
+
     def __getitem__(self, index):
 
         """Return a data point and its metadata information.
@@ -139,98 +129,79 @@ class UnalignedDataset(BaseDataset):
             A_paths (str)    -- image paths
             B_paths (str)    -- image paths
         """
-        
-        #A_path = self.A_paths[index_A]  # make sure index is within then range
-
-
         # If we have paired data in our set, we want to be sure that we are picking up a ratio of 50:50. Otherwise, don't consider this condition
+        if self.opt.phase != 'test' and not self.force_testing:
+            index_A = index  % int(self.vol_sizeA*(self.chunks_per_imgA[0]/self.number_slices))
 
-        if self.opt.phase != 'test' and not self.force_testing and len(self.idx_paired_A) > 0  and self.include_paired_images:
-            # We define a ratio 50:50 paired:unpaired
-            paired = random.choice((True, False))
-            if paired:
-                index_A = random.choice(self.idx_paired_A)
-            else:
-                index_A = random.choice(self.idx_unpaired_A)
-        else:
-            paired = False
-            index_A = index % self.A_size
-        # Define image from A set
-        A_path = self.A_paths[index_A]
-        
+        # Loading A imgs and A masks
+        A_paths = self.A_paths[index_A*self.number_slices:index_A*self.number_slices + self.number_slices]
+        maskA_paths = self.maskA_paths[index_A*self.number_slices:index_A*self.number_slices + self.number_slices]
+        # Get slices
+        A_slices = self.image_names_A[index_A*self.number_slices:index_A*self.number_slices + self.number_slices]
+        A_vol_img = A_slices[0][0:3]
+
         # Define B image
-        if self.opt.serial_batches:   # make sure index is within then range
-            index_B = index % self.B_size
+        if self.opt.serial_batches:   
+            # Get the imgs and masks
+            B_paths = self.B_paths[index_A*self.number_slices:index_A*self.number_slices + self.number_slices]
+            maskB_paths = self.maskB_paths[index_A*self.number_slices:index_A*self.number_slices + self.number_slices]
+
         else:   # randomize the index for domain B to avoid fixed pairs.
-            # Check the relative position of the image (Position based selection PBS)
-            A_path_spplited = A_path.split(".")
-            A_relative_position = A_path_spplited[-2].split("_")[-1]
-            # Convert to a number
-            A_relative_position = float(A_relative_position)
             # Get the age of that image
-            A_months = self.ages_images_A[index_A]
-            # Obtain the images in a similar range (Position based selection)
-            potential_indexes = [index for index, value in enumerate(self.relative_pos_B) if (A_relative_position-self.position_based_range) <= value <= (A_relative_position + self.position_based_range)]
+            A_months = self.ages_images_A[list(self.vol_imgsA).index(A_vol_img)]
             # Select images which are in a similar age
             potential_indexes_months = [index for index, value in enumerate(self.ages_images_B) if (A_months-self.range_months) <= value <= (A_months + self.range_months)]
-            # Considering inclusion of paired dataset, we need to select images from the paired CT scan
-            #paired_img = self.paired_imgs_A[index_A]
-            if paired:
-                base_img = self.base_names_A[index_A]
-                potential_indexes_paired = [idx for idx, img in enumerate(self.base_names_B) if base_img == img]
-                potential_indexes = list(set(potential_indexes) & set(potential_indexes_paired))
 
-            # Define position of B image
-            potential_indexes = list(set(potential_indexes) & set(potential_indexes_months))
-            index_position = random.randint(0, len(potential_indexes) - 1)
-            index_B = potential_indexes[index_position]
-            #index_B = random.randint(0, self.B_size - 1)
-        # Selecting the B image
-        B_path = self.B_paths[index_B]
-        # Loading masks
-        maskA_path = self.maskA_paths[index_A]
-        maskB_path = self.maskB_paths[index_B]
-        # A_img = Image.open(A_path).convert('RGB')
-        # B_img = Image.open(B_path).convert('RGB')
+            # Define  volumetric B image
+            index_months = random.randint(0, len(potential_indexes_months) - 1)
+            index_B = potential_indexes_months[index_months]
+            # Selecting the B image
+            B_vol_img = self.vol_imgsB[index_B]
+            # Select a random slice from that volumetric image
 
-        # A_mask = Image.open(maskA_path)
-        # B_mask = Image.open(maskB_path)
-        A_img = io.read_image(A_path)
-        B_img = io.read_image(B_path)
-    
-        A_mask = io.read_image(maskA_path)
-        B_mask = io.read_image(maskB_path)
+            # Check the relative position of the image (Position based selection PBS)
+            A_path_spplited = A_paths[0].split(".")
+            A_absolute_position = A_path_spplited[-2].split("_")[-2]
+            B_slices = [slice for slice in self.image_names_B if B_vol_img in slice[0:3]]        
+            # Obtain the images in a similar range 
+            B_initial_slice = [slice for slice in B_slices if A_absolute_position == slice[4:7]][0]
+            B_paths = [self.B_paths[slice] for slice in range(self.image_names_B.index(B_initial_slice),self.image_names_B.index(B_initial_slice) + self.number_slices)]                
+            # Get the B masks    
+            maskB_paths = [self.maskB_paths[slice] for slice in range(self.image_names_B.index(B_initial_slice),self.image_names_B.index(B_initial_slice) + self.number_slices)]
 
-        # apply data augmentation to paired images
-        if paired:
-            #mri_augmented_base = self.transform_paired({'mri': torch.tensor(mri), 'ct': torch.tensor(ct), 'mri_mask' : torch.tensor(mri_mask), 'ct_mask': torch.tensor(ct_mask)})
-            paired_images = self.transform_paired({'mri': A_img, 'ct': B_img, 'mri_mask' : A_mask, 'ct_mask': B_mask})
-            A_img = paired_images['mri']
-            A_mask = paired_images['mri_mask']
-            B_img = paired_images['ct']
-            B_mask = paired_images['ct_mask']
+        # Load images and mask
+        for idx in range(0,self.number_slices):
 
-        # apply image transformation to standarize data
-        A, A_mask = self.transform_A(A_img, A_mask)
-        B, B_mask = self.transform_B(B_img, B_mask)
-        # A_mask = self.transform_maskA(A_mask)
-        # B_mask = self.transform_maskB(B_mask)
+            A_path = A_paths[idx]
+            B_path = B_paths[idx]
+            maskA_path = maskA_paths[idx]
+            maskB_path = maskB_paths[idx]
 
-        # if self.input_nc == 1:  # RGB to gray
-        #     tmp = A[0, ...] * 0.299 + A[1, ...] * 0.587 + A[2, ...] * 0.114
-        #     A = tmp.unsqueeze(0)
+            A_img = io.read_image(A_path)
+            B_img = io.read_image(B_path)
+        
+            A_mask = io.read_image(maskA_path)
+            B_mask = io.read_image(maskB_path)
 
-        # if self.output_nc == 1:  # RGB to gray
-        #     tmp = B[0, ...] * 0.299 + B[1, ...] * 0.587 + B[2, ...] * 0.114
-        #     B = tmp.unsqueeze(0)
-        return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path,
-        'A_mask': A_mask, 'B_mask': B_mask}
+            # apply image transformation to standarize data
+            A, A_mask = self.transform_A(A_img, A_mask)
+            B, B_mask = self.transform_B(B_img, B_mask)
+
+            if idx == 0:
+                A_chunk = A
+                B_chunk = B
+                A_mask_chunk = A_mask
+                B_mask_chunk = B_mask
+            else:
+                A_chunk = torch.cat((A_chunk, A), dim = 0)         
+                B_chunk = torch.cat((B_chunk, B), dim = 0)
+                A_mask_chunk = torch.cat((A_mask_chunk, A_mask), dim = 0)         
+                B_mask_chunk = torch.cat((B_mask_chunk, B_mask), dim = 0)
+
+        return {'A': A_chunk, 'B': B_chunk, 'A_paths': A_path, 'B_paths': B_path,
+        'A_mask': A_mask_chunk, 'B_mask': B_mask_chunk}
 
     def __len__(self):
-        """Return the total number of images in the dataset.
-
-        As we have two datasets with potentially different number of images,
-        we take a maximum of
+        """Return the total number of chunk images in the dataset.
         """
-        #return max(self.A_size, self.B_size)
-        return self.A_size
+        return int(self.vol_sizeA*(self.chunks_per_imgA[0]/self.number_slices))

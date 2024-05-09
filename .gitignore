@@ -10,5 +10,21 @@ twostage_final_results*
 twostage_intermediate_results
 .vscode
 wandb
+outcome_averaging
+outcome_erase
+outcome_justcoronal
+outcome_two_stages
+outcome_two_stages_goodimages
+thirdstage_final_results
+thirdstage_final_results_goodimages
+thirdstage_final_results_solved_images_2nd
+twostage_final_results
+twostage_final_results_solved_images
+twostage_intermediate_results
+twostage_readyforthirdinference_results_goodimages
+twostage_readyforthirdinference_results_goodimages_justcoronal
+outcome_erase
+old
+erase
 # train.sh
 # test.sh

@@ -8,8 +8,8 @@ import shutil
 
 # Call the parser
 parser = argparse.ArgumentParser()
-parser.add_argument('--intermediate_results_folder', default='twostage_intermediate_results/semisupervised-registered/', help='path to intermediate results (1rst stage)')
-parser.add_argument('--intermediate_voxels_folder', default='../../data/two_stage_approach/intermediate_voxels/semisupervised-registered/', help='path to leave input of 2nd stage')
+parser.add_argument('--intermediate_results_folder', default='twostage_intermediate_results/unsupervised_steplr/', help='path to intermediate results (1rst stage)')
+parser.add_argument('--intermediate_voxels_folder', default='../../data/two_stage_approach/intermediate_voxels/unsupervised_steplr/', help='path to leave input of 2nd stage')
 parser.add_argument('--size_input', default=224, help='length of sides of input image')
 args = parser.parse_args()
 

@@ -30,6 +30,7 @@ import copy
 from torchmetrics.image import StructuralSimilarityIndexMeasure, PeakSignalNoiseRatio
 import PIL
 import numpy as np
+import time
 
 def validate(val_set, model):
     #ssim = StructuralSimilarityIndexMeasure(data_range=1.0)
@@ -48,6 +49,11 @@ def validate(val_set, model):
     mse = 0.0
     ssim = 0.0
     psnr = 0.0
+
+    # Check number of total batches for validation set
+    val_batches = len(val_set.dataloader)
+    range_between_batches = val_batches // 6
+
     for i, data in enumerate(val_set):  # inner loop within one epoch
         model.set_input(data)         # unpack data from dataset and apply preprocessing
         model.test()   # calculate loss functions, get gradients, update network weights
@@ -70,52 +76,51 @@ def validate(val_set, model):
         ssim += metric_ssim(pred.cpu(), real.cpu())
         psnr += metric_psnr(pred.cpu(), real.cpu())
 
-        # if i == 4:
-        #     # Save real
-        #     image_wandb_real = real.cpu().numpy()
-        #     image_wandb_real = np.concatenate(image_wandb_real, axis=1)
-        #     image_wandb_real = ((image_wandb_real + 1) * 127.5).astype(np.uint8)22
-        #     image_wandb_real = PIL.Image.fromarray(np.squeeze(image_wandb_real))
-        #     image_wandb_real = image_wandb_real.convert("L")
-
-        #     # Save prediction
-        #     image_wandb_pred = pred.cpu().numpy()
-        #     image_wandb_pred = np.concatenate(image_wandb_pred, axis=1)
-        #     image_wandb_pred = ((image_wandb_pred + 1) * 127.5).astype(np.uint8)
-        #     image_wandb_pred = PIL.Image.fromarray(np.squeeze(image_wandb_pred))
-        #     image_wandb_pred = image_wandb_pred.convert("L")
-        #     if wandb: 
-        #         wandb.log({"val/examples": [wandb.Image(image_wandb_real, caption="real"),wandb.Image(image_wandb_pred, caption="prediction")]})
-
-        if i == 4: 
+        if i == range_between_batches*2: 
             image_wandb_mri = mri.cpu().numpy()
+            if image_wandb_mri.shape[0] > 4:
+                image_wandb_mri = image_wandb_mri[0:4,:,:,:]
             image_wandb_mri = np.concatenate(image_wandb_mri, axis=1)
             # Save real
             image_wandb_real = real.cpu().numpy()
+            if image_wandb_real.shape[0] > 4:
+                image_wandb_real = image_wandb_real[0:4,:,:,:]
             image_wandb_real = np.concatenate(image_wandb_real, axis=1)
             # Save prediction
             image_wandb_pred = pred.cpu().numpy()
+            if image_wandb_pred.shape[0] > 4:
+                image_wandb_pred = image_wandb_pred[0:4,:,:,:]
             image_wandb_pred = np.concatenate(image_wandb_pred, axis=1)
-        elif i == 8 or i == 20:
+        elif i == range_between_batches*3 or i == range_between_batches*4:
             # Save real
             image_wandb_mri_2 = mri.cpu().numpy()
+            if image_wandb_mri_2.shape[0] > 4:
+                image_wandb_mri_2 = image_wandb_mri_2[0:4,:,:,:]
             image_wandb_mri_2 = np.concatenate(image_wandb_mri_2, axis=1)
             image_wandb_mri = np.concatenate((image_wandb_mri, image_wandb_mri_2), axis=2)
             image_wandb_real_2 = real.cpu().numpy()
+            if image_wandb_real_2.shape[0] > 4:
+                image_wandb_real_2 = image_wandb_real_2[0:4,:,:,:]
             image_wandb_real_2 = np.concatenate(image_wandb_real_2, axis=1)
             image_wandb_real = np.concatenate((image_wandb_real, image_wandb_real_2), axis=2)
             # Save prediction
             image_wandb_pred_2 = pred.cpu().numpy()
+            if image_wandb_pred_2.shape[0] > 4:
+                image_wandb_pred_2 = image_wandb_pred_2[0:4,:,:,:]
             image_wandb_pred_2 = np.concatenate(image_wandb_pred_2, axis=1)
             image_wandb_pred = np.concatenate((image_wandb_pred, image_wandb_pred_2), axis=2)
-        elif i == 24:
+        elif i == range_between_batches*5:
             image_wandb_mri_2 = mri.cpu().numpy()
+            if image_wandb_mri_2.shape[0] > 4:
+                image_wandb_mri_2 = image_wandb_mri_2[0:4,:,:,:]
             image_wandb_mri_2 = np.concatenate(image_wandb_mri_2, axis=1)
             image_wandb_mri = np.concatenate((image_wandb_mri, image_wandb_mri_2), axis=2)
             image_wandb_mri = ((image_wandb_mri + 1) * 127.5).astype(np.uint8)
             image_wandb_mri = PIL.Image.fromarray(np.squeeze(image_wandb_mri))
             image_wandb_mri = image_wandb_mri.convert("L")
             image_wandb_real_2 = real.cpu().numpy()
+            if image_wandb_real_2.shape[0] > 4:
+                image_wandb_real_2 = image_wandb_real_2[0:4,:,:,:]
             image_wandb_real_2 = np.concatenate(image_wandb_real_2, axis=1)
             image_wandb_real = np.concatenate((image_wandb_real, image_wandb_real_2), axis=2)
             image_wandb_real = ((image_wandb_real + 1) * 127.5).astype(np.uint8)
@@ -123,20 +128,21 @@ def validate(val_set, model):
             image_wandb_real = image_wandb_real.convert("L")
             # Save prediction
             image_wandb_pred_2 = pred.cpu().numpy()
+            if image_wandb_pred_2.shape[0] > 4:
+                image_wandb_pred_2 = image_wandb_pred_2[0:4,:,:,:]
             image_wandb_pred_2 = np.concatenate(image_wandb_pred_2, axis=1)
             image_wandb_pred = np.concatenate((image_wandb_pred, image_wandb_pred_2), axis=2)
             image_wandb_pred = ((image_wandb_pred + 1) * 127.5).astype(np.uint8)
             image_wandb_pred = PIL.Image.fromarray(np.squeeze(image_wandb_pred))
             image_wandb_pred = image_wandb_pred.convert("L")
-            if wandb_run: 
+            if opt.report_wandb: 
                 wandb.log({"val/examples": [wandb.Image(image_wandb_mri, caption="MRI"),wandb.Image(image_wandb_real, caption="CT"),wandb.Image(image_wandb_pred, caption="sCT")]})
 
     return (mae/len(val_set)).item(), (mse/len(val_set)).item(), (ssim/len(val_set)).item(), (psnr/len(val_set)).item()
 
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
-    wandb_run = True
-    if wandb_run:
+    if opt.report_wandb:
         wandb.init(project="maskgan2D", name=opt.name) 
 
     train_dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
@@ -178,8 +184,9 @@ if __name__ == '__main__':
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()
                 # Create a dictionary for wandb  
-                if wandb_run:        
+                if opt.report_wandb:        
                     metrics_train = {f'train/{key}': value for key, value in losses.items()} 
+                    metrics_train['train/lr'] = model.get_learning_rate()
                     wandb.log(metrics_train) 
 
                 t_comp = (time.time() - iter_start_time) / opt.batch_size
@@ -195,9 +202,10 @@ if __name__ == '__main__':
             iter_data_time = time.time()
 
         if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
+
             perf = validate(val_dataset, model)
             print('saving the model at the end of epoch %d, iters %d, MAE %d' % (epoch, total_iters, perf[0]))
-            if wandb_run: 
+            if opt.report_wandb:
                 metrics_val = {"val/MAE": perf[0], "val/MSE": perf[1], "val/SSIM" : perf[2], "val/PSNR": perf[3]} 
                 wandb.log(metrics_val)         
             model.save_networks('latest')
@@ -209,4 +217,4 @@ if __name__ == '__main__':
                 best = perf[2]
 
         print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time))
-        model.update_learning_rate()                     # update learning rates at the end of every epoch.
+        model.update_learning_rate()                    # update learning rates at the end of every epoch.

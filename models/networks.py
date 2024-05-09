@@ -60,7 +60,7 @@ def get_scheduler(optimizer, opt):
             return lr_l
         scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
     elif opt.lr_policy == 'step':
-        scheduler = lr_scheduler.StepLR(optimizer, step_size=opt.lr_decay_iters, gamma=0.1)
+        scheduler = lr_scheduler.StepLR(optimizer, step_size=opt.lr_decay_iters, gamma=0.9)
     elif opt.lr_policy == 'plateau':
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, threshold=0.01, patience=5)
     elif opt.lr_policy == 'cosine':
@@ -423,7 +423,7 @@ class ResnetGenerator_Att(nn.Module):
         self.deconv1_norm_attention = nn.InstanceNorm2d(ngf * 2)
         self.deconv2_attention = nn.ConvTranspose2d(ngf * 2, ngf, 3, 2, 1, 1)
         self.deconv2_norm_attention = nn.InstanceNorm2d(ngf)
-        self.deconv3_attention = nn.Conv2d(ngf, self.n_att, 1, 1, 0)
+        self.deconv3_attention = nn.Conv2d(ngf, self.n_att * self.output_nc, 1, 1, 0)
         
         self.tanh = torch.nn.Tanh()
 
@@ -445,35 +445,28 @@ class ResnetGenerator_Att(nn.Module):
         content = self.deconv3_content(x_content)
         # Extract the content
         image = self.tanh(content)
-        images = []
-        for i in range(self.n_att-1):
-            images.append(image[:, i*self.output_nc : (i+1)*self.output_nc, :, :])
-
+        # Decoder for attention
         x_attention = F.relu(self.deconv1_norm_attention(self.deconv1_attention(x)))
         x_attention = F.relu(self.deconv2_norm_attention(self.deconv2_attention(x_attention)))
-
         attention = self.deconv3_attention(x_attention)
+        softmax = torch.nn.Softmax(dim=1)
+        attention_per_layer = softmax(attention)
 
-        softmax_ = torch.nn.Softmax(dim=1)
-        attention = softmax_(attention)
-        if self.argmax:
-            values, indices = attention.max(dim=1, keepdim=True)
-            attention = torch.zeros(attention.shape).to(attention.device).scatter(1, indices, values)
         attentions = []
-        for i in range(self.n_att):
-            attentions.append(attention[:, i:(i+1), :, :])
-
         outputs = []
-        output = 0
+        images_out = []
         for i in range(self.n_att):
-            if i < self.n_att - 1:
-                out = images[i] * attentions[i]
-            else:
-                out = input * attentions[i]
-            output += out
+            # Apply attention to image features
+            images = image[:, i*self.output_nc : (i+1)*self.output_nc, :, :]
+            out = images * attention_per_layer[:, i:(i+1), :, :]
+            images_out.append(images)
             outputs.append(out)
+            attentions.append(attention_per_layer[:, i:(i+1), :, :])
 
-        return output, outputs, attentions, images
+        # Sum the outputs weighted by attentions
+        output = sum(outputs)
+
+        return output, outputs, attentions, images_out
 
 
 

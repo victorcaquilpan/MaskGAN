@@ -56,10 +56,13 @@ def save_image(image_numpy, image_path):
         image_numpy (numpy array) -- input numpy array
         image_path (str)          -- the path of the image
     """
-    image_numpy = image_numpy.squeeze(-1)
+    if image_numpy.shape[-1] == 1:
+        image_numpy = image_numpy.squeeze(-1)
+    else:
+        image_numpy = image_numpy[:,:,0]
+    #image_numpy = image_numpy[:,:,0]
     image_pil = Image.fromarray(image_numpy)
     image_pil.save(image_path)
-
 
 def print_numpy(x, val=True, shp=False):
     """Print the mean, min, max, median, std, and size of a numpy array

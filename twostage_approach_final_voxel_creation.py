@@ -8,7 +8,7 @@ import shutil
 
 # Call the parser
 parser = argparse.ArgumentParser()
-parser.add_argument('--results_folder', default='results/second-stage/', help='path to intermediate results (1rst stage)')
+parser.add_argument('--results_folder', default='results/unsupervised_second_stage/', help='path to intermediate results (2nd stage)')
 parser.add_argument('--final_voxels_folder', default='twostage_final_results/', help='path to leave input of 2nd stage')
 parser.add_argument('--size_input', default=224, help='length of sides of input image')
 args = parser.parse_args()

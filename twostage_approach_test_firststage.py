@@ -62,6 +62,7 @@ if __name__ == '__main__':
         opt.serial_batches = True
         # To force testing over train, val and test sets
         opt.force_testing = True
+        opt.include_paired_images = False
         dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
         model = create_model(opt)      # create a model given opt.model and other options
         model.setup(opt)               # regular setup: load and print networks; create schedulers

@@ -8,7 +8,7 @@ from torchvision import io
 from monai.transforms import Rand2DElasticd
 import pandas as pd
 
-class UnalignedDataset(BaseDataset):
+class UnalignedMultipleViewsDataset(BaseDataset):
     """
     This dataset class can load unaligned/unpaired datasets.
 
@@ -34,14 +34,29 @@ class UnalignedDataset(BaseDataset):
         self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))   # load images from '/path/to/data/trainA'
         self.B_paths = sorted(make_dataset(self.dir_B, opt.max_dataset_size))    # load images from '/path/to/data/trainB'
 
+        self.maskA_paths = sorted(make_dataset(self.dir_maskA, opt.max_dataset_size))   # load images from '/path/to/data/trainA'
+        self.maskB_paths = sorted(make_dataset(self.dir_maskB, opt.max_dataset_size))    # load images from '/path/to/data/trainB'
+
         # Define if you want to include paired images
         self.include_paired_images = opt.include_paired_images
         if not self.include_paired_images:
             self.A_paths = [img for img in self.A_paths if 'paired'not in img]
+            self.maskA_paths = [img for img in self.maskA_paths if 'paired'not in img]
             self.B_paths = [img for img in self.B_paths if 'paired'not in img]
+            self.maskB_paths = [img for img in self.maskB_paths if 'paired'not in img]
+            
 
-        self.maskA_paths = sorted(make_dataset(self.dir_maskA, opt.max_dataset_size))   # load images from '/path/to/data/trainA'
-        self.maskB_paths = sorted(make_dataset(self.dir_maskB, opt.max_dataset_size))    # load images from '/path/to/data/trainB'
+        # Define if we want all the views (coronal, axial)
+        if opt.include_just_one_view == 'axial':
+            self.A_paths = [img for img in self.A_paths if 'axial' in img]
+            self.maskA_paths = [img for img in self.maskA_paths if 'axial' in img]
+            self.B_paths = [img for img in self.B_paths if 'axial' in img]
+            self.maskB_paths = [img for img in self.maskB_paths if 'axial' in img]
+        elif opt.include_just_one_view == 'coronal':
+            self.A_paths = [img for img in self.A_paths if 'coronal' in img]
+            self.maskA_paths = [img for img in self.maskA_paths if 'coronal' in img]
+            self.B_paths = [img for img in self.B_paths if 'coronal' in img]
+            self.maskB_paths = [img for img in self.maskB_paths if 'coronal' in img]
 
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
@@ -59,20 +74,24 @@ class UnalignedDataset(BaseDataset):
 
         # Check how many 3D images we are considering
         A_paths_main_img = [img.split("/")[-1] for img in self.A_paths]
-        A_paths_main_img = [img.split("_")[0] for img in A_paths_main_img]
+        A_paths_main_img = ['_'.join(img.split("_")[0:2]) for img in A_paths_main_img]
         self.number_3d_images_A = len(np.unique(A_paths_main_img))
         # Same for set B
         B_paths_main_img = [img.split("/")[-1] for img in self.B_paths]
-        B_paths_main_img = [img.split("_")[0] for img in B_paths_main_img]        
+        B_paths_main_img = ['_'.join(img.split("_")[0:2]) for img in B_paths_main_img]       
         self.number_3d_images_B = len(np.unique(B_paths_main_img))
+
+        # Extract the name of images
+        self.image_names_A = [name.split('/')[-1].replace('.png','') for name in self.A_paths]
+        self.image_names_B = [name.split('/')[-1].replace('.png','') for name in self.B_paths]
 
         # Save relative position of each img
         self.relative_pos_A = [int(img.split(".")[-2].split("_")[-1]) for img in self.A_paths]
         self.relative_pos_B = [int(img.split(".")[-2].split("_")[-1]) for img in self.B_paths]
 
-        # Extract the name of images
-        self.image_names_A = [name.split('/')[-1].replace('.png','') for name in self.A_paths]
-        self.image_names_B = [name.split('/')[-1].replace('.png','') for name in self.B_paths]
+        # Get orientation
+        self.orientation_A = [img.split('_')[0] for img in self.image_names_A]
+        self.orientation_B = [img.split('_')[0] for img in self.image_names_B]
 
         # Create an auxiliar list to determine if an image is paired or not
         if not self.include_paired_images:
@@ -85,8 +104,8 @@ class UnalignedDataset(BaseDataset):
             self.idx_unpaired_A = [idx for idx, paired in enumerate(self.paired_imgs_A) if paired != True]
 
         # Extract the name of the base image
-        self.base_names_A = [img.split("_")[1] if 'paired' in img else img.split("_")[0] for img in self.image_names_A]
-        self.base_names_B = [img.split("_")[1] if 'paired' in img else img.split("_")[0] for img in self.image_names_B]
+        self.base_names_A = ['_'.join(img.split("_")[0:2]) for img in self.image_names_A]
+        self.base_names_B = ['_'.join(img.split("_")[0:2]) for img in self.image_names_B]
 
         # Set a margin to use images from a similar relative position
         self.position_based_range = opt.position_based_range # This is a percentage
@@ -108,11 +127,11 @@ class UnalignedDataset(BaseDataset):
             self.ages_images_A = []
             self.ages_images_B = []
             for img in self.base_names_A:
-                age = self.feature_images.loc[(self.feature_images['new_name'] == float(img)) & (self.feature_images['Modality'] == "MR"), "PatientAgeMonths"].values
+                age = self.feature_images.loc[(self.feature_images['new_name'] == float(img.split('_')[1])) & (self.feature_images['Modality'] == "MR"), "PatientAgeMonths"].values
                 if age.size > 0:
                     self.ages_images_A.append(age[0])
             for img in self.base_names_B:
-                age = self.feature_images.loc[(self.feature_images['new_name'] == float(img)) & (self.feature_images['Modality'] == "CT"), "PatientAgeMonths"].values
+                age = self.feature_images.loc[(self.feature_images['new_name'] == float(img.split('_')[1])) & (self.feature_images['Modality'] == "CT"), "PatientAgeMonths"].values
                 if age.size > 0:
                     self.ages_images_B.append(age[0])
             
@@ -167,12 +186,19 @@ class UnalignedDataset(BaseDataset):
             A_relative_position = A_path_spplited[-2].split("_")[-1]
             # Convert to a number
             A_relative_position = float(A_relative_position)
+            # Get the orientation of the image
+            if 'axial' in A_path:
+                A_orientation = 'axial'
+            elif 'coronal' in A_path:
+                A_orientation = 'coronal'
             # Get the age of that image
             A_months = self.ages_images_A[index_A]
             # Obtain the images in a similar range (Position based selection)
             potential_indexes = [index for index, value in enumerate(self.relative_pos_B) if (A_relative_position-self.position_based_range) <= value <= (A_relative_position + self.position_based_range)]
             # Select images which are in a similar age
             potential_indexes_months = [index for index, value in enumerate(self.ages_images_B) if (A_months-self.range_months) <= value <= (A_months + self.range_months)]
+            # Select images of the same orientation
+            potential_indexes_orientation = [index for index, value in enumerate(self.orientation_B) if A_orientation == value]
             # Considering inclusion of paired dataset, we need to select images from the paired CT scan
             #paired_img = self.paired_imgs_A[index_A]
             if paired:
@@ -181,6 +207,7 @@ class UnalignedDataset(BaseDataset):
                 potential_indexes = list(set(potential_indexes) & set(potential_indexes_paired))
 
             # Define position of B image
+            potential_indexes = list(set(potential_indexes) & set(potential_indexes_orientation))
             potential_indexes = list(set(potential_indexes) & set(potential_indexes_months))
             index_position = random.randint(0, len(potential_indexes) - 1)
             index_B = potential_indexes[index_position]

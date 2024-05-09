@@ -66,8 +66,6 @@ for idx, path in enumerate(fake_B_paths):
     img_b = ((img_b* (2000 - (-800)))/ 255) + (-800)
     img_b = np.clip(img_b,a_min= -800, a_max= 2000)
 
-    s = 0 
-
     # Calculate metrics
     mae_val, ssim_val, psnr_val = getting_metrics(img_a,img_b)
     # Adding values
@@ -75,9 +73,11 @@ for idx, path in enumerate(fake_B_paths):
     ssim += ssim_val
     psnr += psnr_val
 
-print('MAE: ', mae/len(real_A_paths))
-print('SSIM: ', ssim/len(real_A_paths))
-print('PSNR: ', psnr/len(real_A_paths))
+print('')
+print('Results')
+print('MAE: ', mae/len(fake_B_paths))
+print('SSIM: ', ssim/len(fake_B_paths))
+print('PSNR: ', psnr/len(fake_B_paths))
 
 
 

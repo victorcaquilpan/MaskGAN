@@ -146,10 +146,10 @@ def save_slice(img, mask, data_dir, data_mask_dir, filename):
 print("Defining main directories")
 
 ### TRAIN
-out_dir = '../../data/two_stage_approach/new_orientation_slicing_2d'
+out_dir = '../../data/two_stage_approach/unsupervised_two_orientation'
 
 # Define the sct folder input
-root_intermediate = '../../data/two_stage_approach/intermediate_voxels/semisupervised-registered/'
+root_intermediate = '../../data/two_stage_approach/intermediate_voxels/unsupervised/'
 train_sct_root =  root_intermediate + 'train/sct/'
 val_sct_root =  root_intermediate + 'val/sct/'
 test_sct_root =  root_intermediate + 'test/sct/'
