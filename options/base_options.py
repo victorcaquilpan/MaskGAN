@@ -59,12 +59,12 @@ class BaseOptions():
         parser.add_argument('--verbose', action='store_true', help='if specified, print more debugging information')
         parser.add_argument('--suffix', default='', type=str, help='customized suffix: opt.name = opt.name + suffix: e.g., {model}_{netG}_size{load_size}')
         parser.add_argument('--saveDisk', action='store_true', help='save disk memory during testing time')
-        # Adding complementary parameters for training
-        parser.add_argument('--feature_images_file_path', type = str, default = '', help = 'Path to the feature image file (csv)')
-        parser.add_argument('--position_based_range', type = int, default = 3, help = 'Define the range for the position-based selection strategy (PBS). In percentage')
-        parser.add_argument('--range_months', type = int, default = 3, help = 'Define the range of months to consider between images')
+        # Adding complementary parameters for baseline
+        parser.add_argument('--n_slices', type = int, default = 1, help = 'For chunk evaluation, we need to define number of slices')
+        parser.add_argument('--stage',type=str,default='first', help='Define which stage you want to run (first or second)')
         parser.add_argument('--include_paired_images', type = bool, default = False, help = 'Define if you want to include paired images')
-        parser.add_argument('--report_wandb', type = bool, default = False, help = 'Define if you want to submit results to WANDB')
+        parser.add_argument('--include_refinement_loss',action='store_true', help='Decide if we go to include refinement loss in second-stage')
+        parser.add_argument('--include_preservation_loss',action='store_true', help='Decide if we go to include preserving loss in second-stage')
         self.initialized = True
         return parser
 

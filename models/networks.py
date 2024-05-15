@@ -468,8 +468,6 @@ class ResnetGenerator_Att(nn.Module):
 
         return output, outputs, attentions, images_out
 
-
-
 class ResnetGenerator_our(nn.Module):
     # initializers
     def __init__(self, input_nc, output_nc, ngf=64, n_blocks=9):
@@ -491,26 +489,6 @@ class ResnetGenerator_our(nn.Module):
             self.resnet_blocks[i].weight_init(0, 0.02)
 
         self.resnet_blocks = nn.Sequential(*self.resnet_blocks)
-
-        # self.resnet_blocks1 = resnet_block(256, 3, 1, 1)
-        # self.resnet_blocks1.weight_init(0, 0.02)
-        # self.resnet_blocks2 = resnet_block(256, 3, 1, 1)
-        # self.resnet_blocks2.weight_init(0, 0.02)
-        # self.resnet_blocks3 = resnet_block(256, 3, 1, 1)
-        # self.resnet_blocks3.weight_init(0, 0.02)
-        # self.resnet_blocks4 = resnet_block(256, 3, 1, 1)
-        # self.resnet_blocks4.weight_init(0, 0.02)
-        # self.resnet_blocks5 = resnet_block(256, 3, 1, 1)
-        # self.resnet_blocks5.weight_init(0, 0.02)
-        # self.resnet_blocks6 = resnet_block(256, 3, 1, 1)
-        # self.resnet_blocks6.weight_init(0, 0.02)
-        # self.resnet_blocks7 = resnet_block(256, 3, 1, 1)
-        # self.resnet_blocks7.weight_init(0, 0.02)
-        # self.resnet_blocks8 = resnet_block(256, 3, 1, 1)
-        # self.resnet_blocks8.weight_init(0, 0.02)
-        # self.resnet_blocks9 = resnet_block(256, 3, 1, 1)
-        # self.resnet_blocks9.weight_init(0, 0.02)
-
         self.deconv1_content = nn.ConvTranspose2d(ngf * 4, ngf * 2, 3, 2, 1, 1)
         self.deconv1_norm_content = nn.InstanceNorm2d(ngf * 2)
         self.deconv2_content = nn.ConvTranspose2d(ngf * 2, ngf, 3, 2, 1, 1)

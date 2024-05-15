@@ -1,11 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from dipy.data import get_fnames
-from dipy.io.image import load_nifti, save_nifti, load_nifti_data
-from dipy.segment.mask import median_otsu
 from dipy.io.image import load_nifti
-from dipy.viz import regtools
-import SimpleITK as sitk
 from scipy import ndimage, misc
 import shutil 
 import os
@@ -17,7 +11,25 @@ import argparse
 import os
 from skimage.metrics import structural_similarity
 from math import log10, sqrt 
-from dipy.align import affine_registration
+import argparse
+
+# Call the parser
+parser = argparse.ArgumentParser()
+parser.add_argument('--results_folder', default='secondstage_solved/', help='path to intermediate results (2nd stage)')
+parser.add_argument('--final_voxels_folder', default='secondstage_solved/', help='path to leave results')
+args = parser.parse_args()
+
+ct_path = 'vol_results/' + args.results_folder  +'real_B/'
+sct1_path = 'vol_results/' + args.results_folder + 'real_A/'
+sct2_path_c = 'vol_results/' + args.results_folder + 'fake_B/'
+# Generate final output
+two_stage_results = 'adjusted_results/' + args.final_voxels_folder
+
+# # Remove output folder if already exists
+if os.path.exists(two_stage_results):
+     shutil.rmtree(two_stage_results)
+# Create output folder
+os.makedirs(two_stage_results)
 
 # Definition of peak signal noise ratio
 def psnr_function(img_a, img_b): 
@@ -29,12 +41,18 @@ def psnr_function(img_a, img_b):
     psnr_val = 20 * log10(max_pixel / sqrt(mse)) 
     return psnr_val 
 
+def ssim_function(img_a, img_b):
+    img_a = ((img_a) + 800)
+    img_b = ((img_b) + 800)
+
+    return structural_similarity(img_a, img_b, data_range = 2800) 
+
 # Definition of metrics
 def getting_metrics(img_a, img_b):
     # Getting MAE
     metric_mae = np.absolute(np.subtract(img_a, img_b)).mean()
     # Getting SSIM. It is necessary to set a distance between max and min value
-    metric_ssim = structural_similarity(img_a, img_b, data_range = 2800) 
+    metric_ssim = ssim_function(img_a, img_b)
     # Getting PSNR
     metric_psnr = psnr_function(img_a,img_b)
     return metric_mae, metric_ssim, metric_psnr
@@ -56,23 +74,7 @@ def resize_volume(img,desired_depth,desired_width, desired_height):
     img = ndimage.zoom(img, (depth_factor, width_factor, height_factor), order=1)
     return img
 
-
-
-##### Generate results over just coronal
-#ct_path = 'thirdstage_final_results_goodimages/real_B/'
-ct_path = 'twostage_readyforthirdinference_results_goodimages_justcoronal/real_B/'
-sct1_path = '../../data/two_stage_approach/intermediate_voxels/unsupervised/test/sct/'
-sct2_path_c = 'twostage_readyforthirdinference_results_goodimages_justcoronal/fake_B/'
-# Generate final output
-two_stage_results = 'outcome_justcoronal/'
-
-
-# # Remove output folder if already exists
-if os.path.exists(two_stage_results):
-     shutil.rmtree(two_stage_results)
-# Create output folder
-os.makedirs(two_stage_results)
-
+# Getting images
 imgs_ct = os.listdir(ct_path)
 imgs_ct = [ct for ct in imgs_ct]
 imgs_sct1 = os.listdir(sct1_path)
@@ -83,66 +85,33 @@ imgs_ct_coronal = [ct for ct in imgs_ct_coronal]
 # Define a padding style
 pad_width = ((20, 20), (20, 20), (20, 20))  # 20 pixels of padding in each dimension
 
-for img_test in [img[8:11] for img in imgs_ct]:
+for img_test in [img[0:3] for img in imgs_ct]:
 
     ct_, _ = load_nifti(ct_path + '/' + [img for img in imgs_ct if img_test in img][0])
     sct1_, _ = load_nifti(sct1_path + '/' + [img for img in imgs_sct1 if img_test in img][0])
     sct2_c, _ = load_nifti(sct2_path_c + '/' + [img for img in imgs_ct_coronal if img_test in img][0])
 
-    
     #Remove images with zero values in the mask
-    non_zero_slices_mask_axis1_2 = np.any(sct2_c, axis=(1, 2))
+    non_zero_slices_mask_axis1_2 = np.any(ct_, axis=(1, 2))
     ct_ = ct_[non_zero_slices_mask_axis1_2]
+    non_zero_slices_mask_axis0_1 = np.any(ct_, axis=(0, 1))
+    ct_ = ct_[:,:,non_zero_slices_mask_axis0_1]
+    non_zero_slices_mask_axis0_2 = np.any(ct_, axis=(0, 2))
+    ct_ = ct_[:,non_zero_slices_mask_axis0_2,:]
+
+    non_zero_slices_mask_axis1_2 = np.any(sct1_, axis=(1, 2))
+    sct1_ = sct1_[non_zero_slices_mask_axis1_2]
+    non_zero_slices_mask_axis0_1 = np.any(sct1_, axis=(0, 1))
+    sct1_ = sct1_[:,:,non_zero_slices_mask_axis0_1]
+    non_zero_slices_mask_axis0_2 = np.any(sct1_, axis=(0, 2))
+    sct1_ = sct1_[:,non_zero_slices_mask_axis0_2,:]
+
+    non_zero_slices_mask_axis1_2 = np.any(sct2_c, axis=(1, 2))
     sct2_c = sct2_c[non_zero_slices_mask_axis1_2]
     non_zero_slices_mask_axis0_1 = np.any(sct2_c, axis=(0, 1))
-    ct_ = ct_[:,:,non_zero_slices_mask_axis0_1]
     sct2_c = sct2_c[:,:,non_zero_slices_mask_axis0_1]
     non_zero_slices_mask_axis0_2 = np.any(sct2_c, axis=(0, 2))
-    ct_ = ct_[:,non_zero_slices_mask_axis0_2,:]
     sct2_c = sct2_c[:,non_zero_slices_mask_axis0_2,:]
-
-    # non_zero_slices_mask_axis1_2 = np.any(sct2_c, axis=(1, 2))
-    # sct2_c = sct2_c[non_zero_slices_mask_axis1_2]
-    # non_zero_slices_mask_axis0_1 = np.any(sct2_c, axis=(0, 1))
-    # sct2_c = sct2_c[:,:,non_zero_slices_mask_axis0_1]
-    # non_zero_slices_mask_axis0_2 = np.any(sct2_c, axis=(0, 2))
-    # sct2_c = sct2_c[:,non_zero_slices_mask_axis0_2,:]
-
-    
-    # #Remove images with zero values in the mask
-    # non_zero_slices_mask_axis1_2 = np.any(ct_, axis=(1, 2))
-    # ct_ = ct_[non_zero_slices_mask_axis1_2]
-    # non_zero_slices_mask_axis0_1 = np.any(ct_, axis=(0, 1))
-    # ct_ = ct_[:,:,non_zero_slices_mask_axis0_1]
-    # non_zero_slices_mask_axis0_2 = np.any(ct_, axis=(0, 2))
-    # ct_ = ct_[:,non_zero_slices_mask_axis0_2,:]
-
-    slices_with_minus_800 = sct1_ != -800.0
-    non_zero_slices_mask_axis1_2 = np.any(slices_with_minus_800, axis=(1, 2))
-    sct1_ = sct1_[non_zero_slices_mask_axis1_2]
-    non_zero_slices_mask_axis0_1 = np.any(slices_with_minus_800, axis=(0, 1))
-    sct1_ = sct1_[:,:,non_zero_slices_mask_axis0_1]
-    non_zero_slices_mask_axis0_2 = np.any(slices_with_minus_800, axis=(0, 2))
-    sct1_ = sct1_[:,non_zero_slices_mask_axis0_2,:]
-    
-    # non_zero_slices_mask_axis1_2 = np.any(sct2_c, axis=(1, 2))
-    # sct2_c = sct2_c[non_zero_slices_mask_axis1_2]
-    # non_zero_slices_mask_axis0_1 = np.any(sct2_c, axis=(0, 1))
-    # sct2_c = sct2_c[:,:,non_zero_slices_mask_axis0_1]
-    # non_zero_slices_mask_axis0_2 = np.any(sct2_c, axis=(0, 2))
-    # sct2_c = sct2_c[:,non_zero_slices_mask_axis0_2,:]
-
-    # #sct2_c = np.pad(sct2_c, [(1, 1), (1, 1), (1, 1)], mode='constant', constant_values=0)
-
-    # # Get the shapes
-    # ct_shape = ct_.shape
-    # sct1_shape = sct1_.shape   
-    # sct2_shape = sct2_c.shape
-   
-    # # Obtaining the max value of each dim
-    # x_ = max(ct_shape[0],sct1_shape[0],sct2_shape[0])
-    # y_ = max(ct_shape[1],sct1_shape[1],sct2_shape[1])
-    # z_ = max(ct_shape[2],sct1_shape[2],sct2_shape[2])
 
     x_ = 134
     y_ = 207
@@ -161,8 +130,8 @@ for img_test in [img[8:11] for img in imgs_ct]:
     # We need to convert img_a to HU
     ct_out = ((ct_out* (2000 - (-800)))/ 255) + (-800)
     ct_out = np.clip(ct_out,a_min= -800, a_max= 2000)
-    #sct1_out = ((sct1_out* (2000 - (-800)))/ 255) + (-800)
-    #sct1_out = np.clip(sct1_out,a_min= -800, a_max= 2000)
+    sct1_out = ((sct1_out* (2000 - (-800)))/ 255) + (-800)
+    sct1_out = np.clip(sct1_out,a_min= -800, a_max= 2000)
     sct2_c_out = ((sct2_c_out* (2000 - (-800)))/ 255) + (-800)
     sct2_c_out = np.clip(sct2_c_out,a_min= -800, a_max= 2000)
 
@@ -180,37 +149,16 @@ for img_test in [img[8:11] for img in imgs_ct]:
     print(f'saving images {img_test}')
     nib.save(ct_out, f'{two_stage_results}/ct_{img_test}.nii.gz')
     nib.save(sct1_out, f'{two_stage_results}/sct1_{img_test}.nii.gz')
-    nib.save(sct2_c_out, f'{two_stage_results}/sct_c_{img_test}.nii.gz')
+    nib.save(sct2_c_out, f'{two_stage_results}/sct2_{img_test}.nii.gz')
 
-    # pipeline = ["center_of_mass", "translation"]
-    # level_iters = [10]
-    # sigmas = [3.0, 1.0, 0.0]
-    # factors = [4, 2, 1]
+files = os.listdir(two_stage_results)
+ct_imgs = [file for file in files if 'ct_' in file]
+ct_imgs = sorted(ct_imgs)
 
-    # sct_a, sct_a_affine = load_nifti(f'{two_stage_results}/sct_c_{img_test}.nii.gz')
-    # sct_c, sct_c_affine = load_nifti(f'{two_stage_results}/sct1_{img_test}.nii.gz')
-
-    # xformed_img, reg_affine = affine_registration(
-    # sct_a,
-    # sct_c,
-    # moving_affine=sct_a_affine,
-    # static_affine=sct_c_affine,
-    # nbins=32,
-    # metric='MI',
-    # pipeline=pipeline,
-    # level_iters=level_iters,
-    # sigmas=sigmas,
-    # factors=factors)
-
-    # # Generate average image
-    # save_nifti(f'{two_stage_results}/sct_reg_c_{img_test}.nii.gz', xformed_img, reg_affine)
-
-
-ct_imgs = ['ct_271.nii.gz','ct_272.nii.gz','ct_273.nii.gz','ct_274.nii.gz']
-
-for type in ['3d', '2d-sagittal', '2d-axial', '2d-coronal']:
+#for type in ['3d', '2d-sagittal', '2d-axial', '2d-coronal']:
+for type in ['3d']:
         
-    for results in ['sct_c_']:
+    for results in ['sct1_', 'sct2_']:
 
         # Set the metrics to zero   
         mae = 0
@@ -220,7 +168,6 @@ for type in ['3d', '2d-sagittal', '2d-axial', '2d-coronal']:
         files = os.listdir(two_stage_results)
         files = [file for file in files if results in file]
         files = sorted(files)
-
 
         if type == '2d-sagittal':
             mae_per_slice = []
@@ -318,7 +265,7 @@ for type in ['3d', '2d-sagittal', '2d-axial', '2d-coronal']:
 
         if results == 'sct1_':
             text = f"First infence (Sagittal) {type}"
-        elif results == 'sct_c_':
+        elif results == 'sct2_':
             text = f"Second inference (Sagittal -> Coronal) {type}"
         # elif results == 'sct_reg_c_':
         #     text = f"Second inference registered (Sagittal -> Coronal) {type}"
@@ -329,4 +276,6 @@ for type in ['3d', '2d-sagittal', '2d-axial', '2d-coronal']:
         print('SSIM: ', ssim/len(files))
         print('PSNR: ', psnr/len(files))
     print("===========================================================")
+
+
 

@@ -8,8 +8,9 @@ from torchvision import io
 from monai.transforms import Rand2DElasticd
 import pandas as pd
 import torch
+import os
 
-class UnalignedSecondstageDataset(BaseDataset):
+class UnalignedChunksDataset(BaseDataset):
     """
     This dataset class can load unaligned/unpaired datasets.
 
@@ -43,6 +44,7 @@ class UnalignedSecondstageDataset(BaseDataset):
         # Get the size of dataset B
         self.B_size = len(self.B_paths)  
         btoA = opt.direction == 'BtoA'
+        self.half = opt.half
         if opt.half:
             self.A_size, self.B_size = self.A_size//2, self.B_size//2
             self.A_paths, self.B_paths = self.A_paths[:self.A_size], self.B_paths[self.B_size:]
@@ -51,8 +53,6 @@ class UnalignedSecondstageDataset(BaseDataset):
         self.output_nc = self.opt.input_nc if btoA else self.opt.output_nc      # get the number of channels of output image
         self.transform_A = get_transform(self.opt, grayscale=True)
         self.transform_B = get_transform(self.opt, grayscale=True)
-        # self.transform_maskA = get_transform(self.opt, grayscale=(self.input_nc == 1), mask=True)
-        # self.transform_maskB = get_transform(self.opt, grayscale=(self.output_nc == 1), mask=True)
 
         # Check how many 3D images we are considering
         A_paths_main_img = [img.split("/")[-1] for img in self.A_paths]
@@ -81,19 +81,17 @@ class UnalignedSecondstageDataset(BaseDataset):
 
         # Get the size of volumetric images
         self.vol_sizeA = len(self.vol_imgsA)
+        self.vol_sizeB = len(self.vol_imgsB)
         
         # Set a margin to use images from a similar relative position
-        self.position_based_range = opt.position_based_range # This is a percentage
-        # Define the age range
-        self.range_months = opt.range_months
+        self.phase = opt.phase
+        if self.phase == 'train':
+            self.position_based_range = opt.position_based_range # This is a percentage
+            # Define the age range
+            self.range_months = opt.range_months
 
-        # To force testing over train set
-        try:
-            self.force_testing = opt.force_testing
-        except:
-            self.force_testing = False
-
-        if self.opt.phase != 'test' and not self.force_testing:
+        
+        if self.opt.phase != 'test':
             # Loading the CSV file
             self.feature_images = pd.read_csv(opt.feature_images_file_path)
             # Remove duplicate rows
@@ -111,13 +109,14 @@ class UnalignedSecondstageDataset(BaseDataset):
                     self.ages_images_B.append(age[0])
 
         # Define a number of consecutive number of images to process
-        self.number_slices = opt.input_nc
+        self.number_slices = opt.n_slices
+        self.serial_batches = opt.serial_batches
 
         # Check number of chunks
         self.chunks_per_imgA = [self.base_names_A.count(img) for img in self.vol_imgsA]
+        self.chunks_per_imgB = [self.base_names_B.count(img) for img in self.vol_imgsB]
 
     def __getitem__(self, index):
-
         """Return a data point and its metadata information.
 
         Parameters:
@@ -129,45 +128,41 @@ class UnalignedSecondstageDataset(BaseDataset):
             A_paths (str)    -- image paths
             B_paths (str)    -- image paths
         """
-        # If we have paired data in our set, we want to be sure that we are picking up a ratio of 50:50. Otherwise, don't consider this condition
-        if self.opt.phase != 'test' and not self.force_testing:
-            index_A = index  % int(self.vol_sizeA*(self.chunks_per_imgA[0]/self.number_slices))
+        if index == 0:
+            index_A = 0
+        else: 
+            index_A = (index * self.number_slices)
 
         # Loading A imgs and A masks
-        A_paths = self.A_paths[index_A*self.number_slices:index_A*self.number_slices + self.number_slices]
-        maskA_paths = self.maskA_paths[index_A*self.number_slices:index_A*self.number_slices + self.number_slices]
-        # Get slices
-        A_slices = self.image_names_A[index_A*self.number_slices:index_A*self.number_slices + self.number_slices]
-        A_vol_img = A_slices[0][0:3]
+        A_paths = self.A_paths[index_A:index_A + self.number_slices] 
+        maskA_paths = self.maskA_paths[index_A:index_A + self.number_slices]
 
-        # Define B image
-        if self.opt.serial_batches:   
-            # Get the imgs and masks
-            B_paths = self.B_paths[index_A*self.number_slices:index_A*self.number_slices + self.number_slices]
-            maskB_paths = self.maskB_paths[index_A*self.number_slices:index_A*self.number_slices + self.number_slices]
-
-        else:   # randomize the index for domain B to avoid fixed pairs.
-            # Get the age of that image
+        if self.phase == 'train' and not self.serial_batches:
+            # Get slices of A
+            A_slices = self.image_names_A[index_A:index_A + self.number_slices]
+            A_vol_img = A_slices[0][0:3]
             A_months = self.ages_images_A[list(self.vol_imgsA).index(A_vol_img)]
             # Select images which are in a similar age
             potential_indexes_months = [index for index, value in enumerate(self.ages_images_B) if (A_months-self.range_months) <= value <= (A_months + self.range_months)]
-
             # Define  volumetric B image
             index_months = random.randint(0, len(potential_indexes_months) - 1)
             index_B = potential_indexes_months[index_months]
             # Selecting the B image
             B_vol_img = self.vol_imgsB[index_B]
-            # Select a random slice from that volumetric image
-
-            # Check the relative position of the image (Position based selection PBS)
-            A_path_spplited = A_paths[0].split(".")
-            A_absolute_position = A_path_spplited[-2].split("_")[-2]
-            B_slices = [slice for slice in self.image_names_B if B_vol_img in slice[0:3]]        
-            # Obtain the images in a similar range 
-            B_initial_slice = [slice for slice in B_slices if A_absolute_position == slice[4:7]][0]
+            # Select the slices of that volume
+            B_slices = [slice for slice in self.image_names_B if B_vol_img in slice[0:3]]
+            # Extract the absolute position of A
+            absolute_pos_A = os.path.basename(A_paths[0]).split("_")[1]
+            # Select the specific B slices
+            #B_slices = B_slices[int(absolute_pos_A): int(absolute_pos_A) + self.number_slices]
+            B_initial_slice = [slice for slice in B_slices if absolute_pos_A == slice[4:7]][0]
             B_paths = [self.B_paths[slice] for slice in range(self.image_names_B.index(B_initial_slice),self.image_names_B.index(B_initial_slice) + self.number_slices)]                
             # Get the B masks    
             maskB_paths = [self.maskB_paths[slice] for slice in range(self.image_names_B.index(B_initial_slice),self.image_names_B.index(B_initial_slice) + self.number_slices)]
+
+        elif self.phase == 'val' or self.phase == 'test' or self.serial_batches:
+            B_paths = self.B_paths[index_A:index_A + self.number_slices]
+            maskB_paths = self.maskB_paths[index_A:index_A + self.number_slices]
 
         # Load images and mask
         for idx in range(0,self.number_slices):
@@ -192,16 +187,26 @@ class UnalignedSecondstageDataset(BaseDataset):
                 B_chunk = B
                 A_mask_chunk = A_mask
                 B_mask_chunk = B_mask
+                A_paths_chunks = [A_path]
+                B_paths_chunks = [B_path]
             else:
                 A_chunk = torch.cat((A_chunk, A), dim = 0)         
                 B_chunk = torch.cat((B_chunk, B), dim = 0)
                 A_mask_chunk = torch.cat((A_mask_chunk, A_mask), dim = 0)         
                 B_mask_chunk = torch.cat((B_mask_chunk, B_mask), dim = 0)
+                A_paths_chunks = A_paths_chunks + [A_path]
+                B_paths_chunks = B_paths_chunks + [B_path]
 
-        return {'A': A_chunk, 'B': B_chunk, 'A_paths': A_path, 'B_paths': B_path,
+        return {'A': A_chunk, 'B': B_chunk, 'A_paths': A_paths_chunks, 'B_paths': B_paths_chunks,
         'A_mask': A_mask_chunk, 'B_mask': B_mask_chunk}
 
     def __len__(self):
         """Return the total number of chunk images in the dataset.
         """
-        return int(self.vol_sizeA*(self.chunks_per_imgA[0]/self.number_slices))
+        if self.half:
+            return (int(self.vol_sizeB*(self.chunks_per_imgB[0]/self.number_slices))) //2
+        else:
+            return int(self.vol_sizeB*(self.chunks_per_imgB[0]/self.number_slices)) 
+
+
+

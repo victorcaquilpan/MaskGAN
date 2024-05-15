@@ -54,8 +54,6 @@ class UnalignedDataset(BaseDataset):
         self.output_nc = self.opt.input_nc if btoA else self.opt.output_nc      # get the number of channels of output image
         self.transform_A = get_transform(self.opt, grayscale=(self.input_nc == 1))
         self.transform_B = get_transform(self.opt, grayscale=(self.output_nc == 1))
-        # self.transform_maskA = get_transform(self.opt, grayscale=(self.input_nc == 1), mask=True)
-        # self.transform_maskB = get_transform(self.opt, grayscale=(self.output_nc == 1), mask=True)
 
         # Check how many 3D images we are considering
         A_paths_main_img = [img.split("/")[-1] for img in self.A_paths]
@@ -125,6 +123,9 @@ class UnalignedDataset(BaseDataset):
             scale_range=(0.2, 0.2),
             padding_mode="zeros")
         
+        # Store the phase
+        self.phase = opt.phase
+        
         
     def __getitem__(self, index):
 
@@ -139,12 +140,7 @@ class UnalignedDataset(BaseDataset):
             A_paths (str)    -- image paths
             B_paths (str)    -- image paths
         """
-        
-        #A_path = self.A_paths[index_A]  # make sure index is within then range
-
-
         # If we have paired data in our set, we want to be sure that we are picking up a ratio of 50:50. Otherwise, don't consider this condition
-
         if self.opt.phase != 'test' and not self.force_testing and len(self.idx_paired_A) > 0  and self.include_paired_images:
             # We define a ratio 50:50 paired:unpaired
             paired = random.choice((True, False))
@@ -184,17 +180,13 @@ class UnalignedDataset(BaseDataset):
             potential_indexes = list(set(potential_indexes) & set(potential_indexes_months))
             index_position = random.randint(0, len(potential_indexes) - 1)
             index_B = potential_indexes[index_position]
-            #index_B = random.randint(0, self.B_size - 1)
+            
         # Selecting the B image
         B_path = self.B_paths[index_B]
         # Loading masks
         maskA_path = self.maskA_paths[index_A]
         maskB_path = self.maskB_paths[index_B]
-        # A_img = Image.open(A_path).convert('RGB')
-        # B_img = Image.open(B_path).convert('RGB')
 
-        # A_mask = Image.open(maskA_path)
-        # B_mask = Image.open(maskB_path)
         A_img = io.read_image(A_path)
         B_img = io.read_image(B_path)
     
@@ -213,16 +205,7 @@ class UnalignedDataset(BaseDataset):
         # apply image transformation to standarize data
         A, A_mask = self.transform_A(A_img, A_mask)
         B, B_mask = self.transform_B(B_img, B_mask)
-        # A_mask = self.transform_maskA(A_mask)
-        # B_mask = self.transform_maskB(B_mask)
 
-        # if self.input_nc == 1:  # RGB to gray
-        #     tmp = A[0, ...] * 0.299 + A[1, ...] * 0.587 + A[2, ...] * 0.114
-        #     A = tmp.unsqueeze(0)
-
-        # if self.output_nc == 1:  # RGB to gray
-        #     tmp = B[0, ...] * 0.299 + B[1, ...] * 0.587 + B[2, ...] * 0.114
-        #     B = tmp.unsqueeze(0)
         return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path,
         'A_mask': A_mask, 'B_mask': B_mask}
 
@@ -232,5 +215,8 @@ class UnalignedDataset(BaseDataset):
         As we have two datasets with potentially different number of images,
         we take a maximum of
         """
-        #return max(self.A_size, self.B_size)
-        return self.A_size
+        if self.phase == 'train':
+            #return max(self.A_size, self.B_size)
+            return self.A_size 
+        else:
+            return self.A_size

@@ -76,19 +76,12 @@ def save_intermediate_images_twostages(webpage, visuals, image_path, aspect_rati
     This function will save images stored in 'visuals' to the HTML file specified by 'webpage'.
     """
     image_dir = webpage.get_image_dir()
-    short_path = ntpath.basename(image_path[0])
+    short_path = ntpath.basename(image_path)
     name = os.path.splitext(short_path)[0]
 
     webpage.add_header(name)
     ims, txts, links = [], [], []
-    #mae = visuals['MAE'][0,0].cpu().float().numpy()
-    #value = np.mean(mae)*100
-    #image_name = '%s_%s_%.png' % (name, 'MAE', value)
-    #image_name = '{0}_MAE_{1}.png'.format(name, value)
-    #save_path = os.path.join(image_dir, image_name)
-    #plot_heatmap(mae, save_path)
-
-    #visuals.pop('MAE', None)
+    
     for label, im_data in visuals.items():
         im = util.tensor2im(im_data)
         image_name = '%s_%s.png' % (name, label)

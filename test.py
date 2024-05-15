@@ -30,7 +30,7 @@ import os
 from options.test_options import TestOptions
 from data import create_dataset
 from models import create_model
-from util.visualizer import save_images
+from util.visualizer import save_intermediate_images_twostages
 from util import html
 import glob
 import shutil
@@ -38,8 +38,6 @@ import torch
 
 if __name__ == '__main__':
     opt = TestOptions().parse()  # get test options
-    # hard-code some parameters for test
-    opt.include_just_one_view = 'coronal'
     
     opt.num_threads = 0   # test code only supports num_threads = 1
     opt.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
@@ -49,64 +47,78 @@ if __name__ == '__main__':
     
     model = create_model(opt)      # create a model given opt.model and other options
     model.setup(opt)               # regular setup: load and print networks; create schedulers
+
+    # Remove output folder if already exists
+    if os.path.exists(f'{opt.results_dir}/{opt.name}'):
+        shutil.rmtree(f'{opt.results_dir}/{opt.name}')
+    # Create output folder
+    os.makedirs(f'{opt.results_dir}/{opt.name}')
+
     # create a website
     web_dir = os.path.join(opt.results_dir, opt.name, '%s_%s' % (opt.phase, opt.epoch))  # define the website directory
     webpage = html.HTML(web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, opt.phase, opt.epoch))
     print(web_dir)
-    out_ct = f'{opt.results_dir}/{opt.name}/real_B'
-    out_mri = f'{opt.results_dir}/{opt.name}/real_A'
-    out_fake_ct = f'{opt.results_dir}/{opt.name}/fake_B'
-    out_fake_mri = f'{opt.results_dir}/{opt.name}/fake_A'
+    real_B_path = f'{opt.results_dir}/{opt.name}/real_B'
+    real_A_path = f'{opt.results_dir}/{opt.name}/real_A'
+    fake_B_path = f'{opt.results_dir}/{opt.name}/fake_B'
+    fake_A_path = f'{opt.results_dir}/{opt.name}/fake_A'
     out_mae = f'{opt.results_dir}/{opt.name}/MAE'
-    os.makedirs(out_ct, exist_ok=True)
-    os.makedirs(out_mri, exist_ok=True)
-    os.makedirs(out_fake_ct, exist_ok=True)
-    os.makedirs(out_fake_mri, exist_ok=True)
+    os.makedirs(real_B_path, exist_ok=True)
+    os.makedirs(real_A_path, exist_ok=True)
+    os.makedirs(fake_B_path, exist_ok=True)
+    os.makedirs(fake_A_path, exist_ok=True)
     os.makedirs(out_mae, exist_ok=True)
-    # test with eval mode. This only affects layers like batchnorm and dropout.
-    # For [pix2pix]: we use batchnorm and dropout in the original pix2pix. You can experiment it with and without eval() mode.
-    # For [CycleGAN]: It should not affect CycleGAN as CycleGAN uses instancenorm without dropout.
+
+    # Define the model for evaluation purposes
     if opt.eval:
         model.eval()
     for i, data in enumerate(dataset):
 
         if opt.num_test > 0 and i >= opt.num_test:  # only apply our model to opt.num_test images.
             break
+
         model.set_input(data)  # unpack data from data loader
         model.test()           # run inference
         visuals = model.get_current_visuals()  # get image results
-
-        ## Fix background CT
-        #mask = visuals['mask_A']
-        #visuals['real_B'][mask == 1] = -1
         visuals['MAE'] = torch.abs(visuals['real_B'] - visuals['fake_B'])
-        
+
+        # Get image paths
+        img_path_A = data['A_paths'][0]     
+        img_path_B = data['B_paths'][0]
+ 
         img_path = model.get_image_paths()     # get image paths
-        if i % 5 == 0:  # save images to an HTML file
-            print('processing (%04d)-th image... %s' % (i, img_path))
-        save_images(webpage, visuals, img_path, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize)
+        # if i % 5 == 0:  # save images to an HTML file
+        #     print('processing (%04d)-th image... %s' % (i, img_path))
+
+        for idx_batch in range(0,visuals['real_A'].shape[0]):
+
+                visuals_real_A = {'real_A' : visuals['real_A'][idx_batch,:,:].unsqueeze(1)}
+                visuals_real_B = {'real_B' : visuals['real_B'][idx_batch,:,:].unsqueeze(1)}
+                visuals_fake_A = {'fake_A': visuals['fake_A'][idx_batch,:,:].unsqueeze(1)}
+                visuals_fake_B = {'fake_B': visuals['fake_B'][idx_batch,:,:].unsqueeze(1)}
+                save_intermediate_images_twostages(webpage, visuals_real_A, img_path_A[idx_batch], aspect_ratio=opt.aspect_ratio, width=opt.display_winsize)
+                save_intermediate_images_twostages(webpage, visuals_real_B, img_path_B[idx_batch], aspect_ratio=opt.aspect_ratio, width=opt.display_winsize)
+                save_intermediate_images_twostages(webpage, visuals_fake_A, img_path_A[idx_batch], aspect_ratio=opt.aspect_ratio, width=opt.display_winsize)
+                save_intermediate_images_twostages(webpage, visuals_fake_B, img_path_B[idx_batch], aspect_ratio=opt.aspect_ratio, width=opt.display_winsize)
 
     webpage.save()  # save the HTML
     print("Move images")
     ### Save results
-    for filepath in glob.glob(f'{web_dir}/images/*real_A*'):
-        filename = os.path.basename(filepath)
-        shutil.copy(filepath, f'{out_mri}/{filename}')
-    
-    for filepath in glob.glob(f'{web_dir}/images/*real_B*'):
-        filename = os.path.basename(filepath)
-        shutil.copy(filepath, f'{out_ct}/{filename}')
-    
-    for filepath in glob.glob(f'{web_dir}/images/*fake_B*'):
-        filename = os.path.basename(filepath)
-        shutil.copy(filepath, f'{out_fake_ct}/{filename}')
-
     for filepath in glob.glob(f'{web_dir}/images/*fake_A*'):
-        filename = os.path.basename(filepath)
-        shutil.copy(filepath, f'{out_fake_mri}/{filename}')
-    
-    for filepath in glob.glob(f'{web_dir}/images/*MAE*'):
-        filename = os.path.basename(filepath)
-        shutil.copy(filepath, f'{out_mae}/{filename}')
+        filename = os.path.basename(filepath).replace("_fake_A","")
+        shutil.copy(filepath, f'{fake_A_path}/{filename}')
+    for filepath in glob.glob(f'{web_dir}/images/*real_A*'):
+        filename = os.path.basename(filepath).replace("_real_A","")
+        shutil.copy(filepath, f'{real_A_path}/{filename}')
+    for filepath in glob.glob(f'{web_dir}/images/*fake_B*'):
+        filename = os.path.basename(filepath).replace("_fake_B","")
+        shutil.copy(filepath, f'{fake_B_path}/{filename}')
+    for filepath in glob.glob(f'{web_dir}/images/*real_B*'):
+        filename = os.path.basename(filepath).replace("_real_B","")
+        shutil.copy(filepath, f'{real_B_path}/{filename}')
+    # Remove temporal folder
+    shutil.rmtree(web_dir)
+        
+
 
 

@@ -4,7 +4,7 @@ from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
 from apex import amp
-
+from pytorch_msssim import ssim, ms_ssim # type: ignore
 
 class MaskGANModel(BaseModel):
     @staticmethod
@@ -27,10 +27,14 @@ class MaskGANModel(BaseModel):
     def __init__(self, opt):
         BaseModel.__init__(self, opt)
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
+        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B', 'maskA', 'maskB', 'shapeA', 'shapeB']
         if self.opt.include_paired_images:
-            self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B', 'maskA', 'maskB', 'shapeA', 'shapeB', 'paired_A', 'paired_B']
-        else:
-            self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B', 'maskA', 'maskB', 'shapeA', 'shapeB']
+            self.loss_names.append('paired_A') 
+            self.loss_names.append('paired_B')
+        if self.opt.include_preservation_loss:
+            self.loss_names.append('preservation_view')
+        if self.opt.include_refinement_loss:
+            self.loss_names.append('refinement')
 
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         visual_names_A = ['real_A', 'fake_B', 'rec_A', 'o1_b', 'o2_b', 'o3_b', 'o_bg_b',
@@ -55,12 +59,10 @@ class MaskGANModel(BaseModel):
         self.lambda_shape = 0
 
         # define networks (both Generators and discriminators)
-        # The naming is different from those used in the paper.
-        # Code (vs. paper): G_A (G), G_B (F), D_A (D_Y), D_B (D_X)
-        self.netG_A = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, 'att', opt.norm,
+        self.netG_A = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm,
                                         not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids,
                                         n_att=opt.n_attentions, argmax=opt.argmax)
-        self.netG_B = networks.define_G(opt.output_nc, opt.input_nc, opt.ngf, 'att', opt.norm,
+        self.netG_B = networks.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm,
                                         not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids, 
                                         n_att=opt.n_attentions, argmax=opt.argmax)
 
@@ -76,11 +78,31 @@ class MaskGANModel(BaseModel):
             self.fake_B_pool = ImagePool(opt.pool_size)  # create image buffer to store previously generated images
             # define loss functions
             self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)  # define GAN loss.
-            self.criterionCycle = torch.nn.L1Loss()
-            self.criterionIdt = torch.nn.L1Loss()
+
+            # Definition of SSIM and MS-SSIM losses for preserving previous structure
+            def ms_ssim_loss(input, target):
+                denormalized_input = (input + 1) / 2
+                denormalized_target = (target + 1) / 2
+                return 1 - ms_ssim(denormalized_input, denormalized_target, data_range=torch.tensor(1.0), size_average=False).mean()
+            def ssim_loss(input, target):
+                denormalized_input = (input + 1) / 2
+                denormalized_target = (target + 1) / 2
+                return 1 - ssim(denormalized_input, denormalized_target, data_range=torch.tensor(1.0), size_average=False).mean()
+        
+            # Add a refinement loss to improve the quality of images
+            if self.opt.include_refinement_loss:
+                self.refinement_loss = ms_ssim_loss
+            # CycleGAN loss
+            self.criterionCycle = ms_ssim_loss
+            # Identity Loss
+            self.criterionIdt = ms_ssim_loss
+            # Mask Loss
             self.criterionMask = torch.nn.L1Loss()
-            # INCLUDING CRITERIA FOR EVALUATING PAIRED IMAGES
-            self.criterionPaired = torch.nn.L1Loss()
+            # Including criteria for paired images
+            if self.opt.include_paired_images:
+                self.criterionPaired = torch.nn.L1Loss()
+            # Including criteria to add preservation loss
+            self.preservationView = ssim_loss
 
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G = torch.optim.Adam(itertools.chain(self.netG_A.parameters(), self.netG_B.parameters()), lr=opt.lr, betas=(opt.beta1, 0.999))
@@ -114,22 +136,7 @@ class MaskGANModel(BaseModel):
         self.mask_B = input['B_mask'].to(self.device)
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
         self.paired_imgs = [True if 'paired' in img else False for img in self.image_paths]
-
-    # def forward(self):
-    #     """Run forward pass; called by both functions <optimize_parameters> and <test>."""
-    #     self.fake_B, self.o1_b, self.o2_b, self.o3_b, self.o4_b, self.o5_b, self.o6_b, self.o7_b, self.o8_b, self.o9_b, self.o10_b, \
-    #     self.a1_b, self.a2_b, self.a3_b, self.a4_b, self.a5_b, self.a6_b, self.a7_b, self.a8_b, self.a9_b, self.a10_b, \
-    #     self.i1_b, self.i2_b, self.i3_b, self.i4_b, self.i5_b, self.i6_b, self.i7_b, self.i8_b, self.i9_b = self.netG_A(self.real_A)  # G_A(A)
-    #     self.rec_A, _, _, _, _, _, _, _, _, _, _, \
-    #     _, _, _, _, _, _, _, _, _, _, \
-    #     _, _, _, _, _, _, _, _, _ = self.netG_B(self.fake_B)   # G_B(G_A(A))
-    #     self.fake_A, self.o1_a, self.o2_a, self.o3_a, self.o4_a, self.o5_a, self.o6_a, self.o7_a, self.o8_a, self.o9_a, self.o10_a, \
-    #     self.a1_a, self.a2_a, self.a3_a, self.a4_a, self.a5_a, self.a6_a, self.a7_a, self.a8_a, self.a9_a, self.a10_a, \
-    #     self.i1_a, self.i2_a, self.i3_a, self.i4_a, self.i5_a, self.i6_a, self.i7_a, self.i8_a, self.i9_a = self.netG_B(self.real_B)  # G_B(B)
-    #     self.rec_B, _, _, _, _, _, _, _, _, _, _, \
-    #     _, _, _, _, _, _, _, _, _, _, \
-    #     _, _, _, _, _, _, _, _, _ = self.netG_A(self.fake_A)   # G_A(G_B(B))
-
+  
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         self.fake_B, self.outputs_B, self.attentions_B, self.images_B = self.netG_A(self.real_A)  # G_A(A)
@@ -143,9 +150,6 @@ class MaskGANModel(BaseModel):
         self.rec_i1_b, self.rec_i2_b, self.rec_i3_b, self.rec_i_last_b = image_rec_A[0], image_rec_A[1], image_rec_A[-2], image_rec_A[-1]
         self.rec_o1_b, self.rec_o2_b, self.rec_o3_b, self.rec_o_bg_b = output_rec_A[0], output_rec_A[1], output_rec_A[-2], output_rec_A[-1]
         self.fake_A, self.outputs_A, self.attentions_A, self.images_A  = self.netG_B(self.real_B)  # G_B(B)
-        # self.o1_a, self.o2_a, self.o3_a, self.o4_a, self.o5_a, self.o6_a, self.o7_a, self.o8_a, self.o9_a, self.o10_a
-        # self.a1_a, self.a2_a, self.a3_a, self.a4_a, self.a5_a, self.a6_a, self.a7_a, self.a8_a, self.a9_a, self.a10_a
-        # self.i1_a, self.i2_a, self.i3_a, self.i4_a, self.i5_a, self.i6_a, self.i7_a, self.i8_a, self.i9_a
         self.rec_B, att_rec_B, _, _ = self.netG_A(self.fake_A)   # G_A(G_B(B))
         self.o1_a, self.o2_a, self.o_bg_a= self.outputs_A[0], self.outputs_A[-2], self.outputs_A[-1]
         self.a1_a, self.a2_a, self.a_bg_a= self.attentions_A[0], self.attentions_A[-2], self.attentions_A[-1]
@@ -190,6 +194,12 @@ class MaskGANModel(BaseModel):
         lambda_shape = self.lambda_shape
         lambda_A = self.opt.lambda_A
         lambda_B = self.opt.lambda_B
+
+        # Adding the calculation of the refinement loss
+        if self.opt.include_refinement_loss:
+                self.loss_refinement = self.refinement_loss(self.real_B,self.fake_B) * 10
+        else: 
+            self.loss_refinement = 0
         # Identity loss
         if lambda_idt > 0:
             # G_A should be identity if real_B is fed: ||G_A(B) - B||
@@ -226,18 +236,24 @@ class MaskGANModel(BaseModel):
         # Backward cycle loss || G_A(G_B(B)) - B||
         self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
         if self.opt.include_paired_images:
-            # BACKWARD PAIRED LOSS A
+            # Backward paired loss A
             self.loss_paired_A = self.criterionPaired(self.fake_A[self.paired_imgs], self.real_A[self.paired_imgs])
-            # BACKWARD PAIRED LOSS B
+            # Backward paired loss B
             self.loss_paired_B = self.criterionPaired(self.fake_B[self.paired_imgs], self.real_B[self.paired_imgs])
+        else:
+            self.loss_paired_A = 0
+            self.loss_paired_B = 0
+        # Backward preservation loss
+        if self.opt.include_preservation_loss:
+            reshaped_real_A = self.real_A.permute(2, 1, 0, 3)
+            reshaped_fake_B = self.fake_B.permute(2, 1, 0, 3)
+            self.loss_preservation_view = self.preservationView(reshaped_fake_B, reshaped_real_A) * 0.01
+        else:
+            self.loss_preservation_view = 0
 
         # combined loss and calculate gradients
-        if self.opt.include_paired_images:
-            self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B \
-                + self.loss_idt_A + self.loss_idt_B + loss_mask + loss_shape + loss_cor + self.loss_paired_A + self.loss_paired_B
-        else:
-            self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B \
-                + self.loss_idt_A + self.loss_idt_B + loss_mask + loss_shape + loss_cor
+        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B \
+        + self.loss_idt_A + self.loss_idt_B + loss_mask + loss_shape + loss_cor + self.loss_paired_A + self.loss_paired_B + self.loss_preservation_view + self.loss_refinement 
         
     def optimize_parameters(self):
         """Calculate losses, gradients, and update network weights; called in every training iteration"""
