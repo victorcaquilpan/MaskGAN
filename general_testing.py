@@ -1,13 +1,15 @@
 import subprocess
 
-for epoch in range(7,10):
+name = 'testingrefinementdiscriminatorl1'
+
+for epoch in range(1,7):
 
     # # Define the script and its arguments
     scripts_with_args = [("test.py", [
             "--dataroot", "../../data/two_stage_approach/slicing_unsupervised_coronal/",
             "--gpu_ids", "0",
             "--model", "mask_gan",
-            "--name", "secondstage_solved",
+            "--name", name,
             "--netG", "att",
             "--dataset_mode", "unaligned_chunks",
             "--preprocess", "none",
@@ -19,14 +21,14 @@ for epoch in range(7,10):
             "--epoch", str(epoch),
         ]),
     ("voxel_creation.py", [
-            "--results_folder", "secondstage_solved/",
-            "--final_voxels_folder", "secondstage_solved/",
+            "--results_folder", f"{name}/",
+            "--final_voxels_folder", f"{name}/",
             "--size_input", "224"
         ]),
     
         ("final_evaluation.py", [
-            "--results_folder", "secondstage_solved/",
-            "--final_voxels_folder", "secondstage_solved/"
+            "--results_folder", f"{name}/",
+            "--final_voxels_folder", f"{name}/"
 
         ])]
 

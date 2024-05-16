@@ -27,14 +27,15 @@ class MaskGANModel(BaseModel):
     def __init__(self, opt):
         BaseModel.__init__(self, opt)
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
-        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B', 'maskA', 'maskB', 'shapeA', 'shapeB']
+        if self.opt.stage == 'first':
+            self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B', 'maskA', 'maskB', 'shapeA', 'shapeB']
+        elif self.opt.stage == 'second':
+            self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'maskA', 'shapeA']
         if self.opt.include_paired_images:
             self.loss_names.append('paired_A') 
             self.loss_names.append('paired_B')
         if self.opt.include_preservation_loss:
             self.loss_names.append('preservation_view')
-        if self.opt.include_refinement_loss:
-            self.loss_names.append('refinement')
 
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         visual_names_A = ['real_A', 'fake_B', 'rec_A', 'o1_b', 'o2_b', 'o3_b', 'o_bg_b',
@@ -89,13 +90,10 @@ class MaskGANModel(BaseModel):
                 denormalized_target = (target + 1) / 2
                 return 1 - ssim(denormalized_input, denormalized_target, data_range=torch.tensor(1.0), size_average=False).mean()
         
-            # Add a refinement loss to improve the quality of images
-            if self.opt.include_refinement_loss:
-                self.refinement_loss = ms_ssim_loss
             # CycleGAN loss
-            self.criterionCycle = ms_ssim_loss
+            self.criterionCycle = torch.nn.L1Loss()
             # Identity Loss
-            self.criterionIdt = ms_ssim_loss
+            self.criterionIdt = torch.nn.L1Loss()
             # Mask Loss
             self.criterionMask = torch.nn.L1Loss()
             # Including criteria for paired images
@@ -195,11 +193,6 @@ class MaskGANModel(BaseModel):
         lambda_A = self.opt.lambda_A
         lambda_B = self.opt.lambda_B
 
-        # Adding the calculation of the refinement loss
-        if self.opt.include_refinement_loss:
-                self.loss_refinement = self.refinement_loss(self.real_B,self.fake_B) * 10
-        else: 
-            self.loss_refinement = 0
         # Identity loss
         if lambda_idt > 0:
             # G_A should be identity if real_B is fed: ||G_A(B) - B||
@@ -215,14 +208,20 @@ class MaskGANModel(BaseModel):
         if lambda_mask > 0:
             self.loss_maskB = self.criterionMask(self.a_bg_b, self.mask_A)
             self.loss_maskA = self.criterionMask(self.a_bg_a, self.mask_B)
-            loss_mask = lambda_mask*(self.loss_maskA + self.loss_maskB)
+            if self.opt.stage == 'first':
+                loss_mask = lambda_mask*(self.loss_maskA + self.loss_maskB)
+            elif self.opt.stage == 'second':
+                loss_mask = lambda_mask*(self.loss_maskA)
         else:
             self.loss_maskA = self.loss_maskB = 0
             loss_mask = 0
         
         self.loss_shapeB = lambda_shape *self.criterionMask(self.a_bg_b, self.att_rec_bg_a)
         self.loss_shapeA = lambda_shape * self.criterionMask(self.a_bg_a, self.att_rec_bg_a)
-        loss_shape = self.loss_shapeA + self.loss_shapeB
+        if self.opt.stage == 'first':
+            loss_shape = self.loss_shapeA + self.loss_shapeB
+        elif self.opt.stage == 'second':
+            loss_shape = self.loss_shapeA
 
         loss_cor_coe_GA = networks.Cor_CoeLoss(self.fake_B, self.real_A) * self.opt.lambda_co_A # fake ct & real mr; Evaluate the Generator of ct(G_A)
         loss_cor_coe_GB = networks.Cor_CoeLoss(self.fake_A, self.real_B) * self.opt.lambda_co_B # fake mr & real ct; Evaluate the Generator of mr(G_B)
@@ -251,10 +250,14 @@ class MaskGANModel(BaseModel):
         else:
             self.loss_preservation_view = 0
 
-        # combined loss and calculate gradients
-        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B \
-        + self.loss_idt_A + self.loss_idt_B + loss_mask + loss_shape + loss_cor + self.loss_paired_A + self.loss_paired_B + self.loss_preservation_view + self.loss_refinement 
-        
+        if self.opt.stage == 'first':
+            # combined loss and calculate gradients
+            self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B \
+            + self.loss_idt_A + self.loss_idt_B + loss_mask + loss_shape + loss_cor + self.loss_paired_A + self.loss_paired_B + self.loss_preservation_view
+        elif self.opt.stage == 'second':
+            # new loss for second stage
+            self.loss_G = self.loss_G_A + loss_mask + loss_shape + loss_cor + self.loss_paired_A + self.loss_paired_B + self.loss_preservation_view 
+
     def optimize_parameters(self):
         """Calculate losses, gradients, and update network weights; called in every training iteration"""
         # forward
@@ -269,12 +272,24 @@ class MaskGANModel(BaseModel):
         self.optimizer_G.step()       # update G_A and G_B's weights
 
         # D_A and D_B
-        self.set_requires_grad([self.netD_A, self.netD_B], True)
-        self.optimizer_D.zero_grad()   # set D_A and D_B's gradients to zero
-        self.backward_D_A()      # calculate gradients for D_A
-        self.backward_D_B()      # calculate graidents for D_B
-        loss_D = self.loss_D_B+self.loss_D_A
-        with amp.scale_loss(loss_D, self.optimizer_D, loss_id=1) as scaled_loss:
-            scaled_loss.backward()
-        torch.nn.utils.clip_grad_norm_(amp.master_params(self.optimizer_G), 1.0)
-        self.optimizer_D.step()
+        if self.opt.stage == 'first':
+
+            self.set_requires_grad([self.netD_A, self.netD_B], True)
+            self.optimizer_D.zero_grad()   # set D_A and D_B's gradients to zero
+            self.backward_D_A()      # calculate gradients for D_A
+            self.backward_D_B()      # calculate graidents for D_B 
+            loss_D = self.loss_D_B+self.loss_D_A
+            
+            with amp.scale_loss(loss_D, self.optimizer_D, loss_id=1) as scaled_loss:
+                scaled_loss.backward()
+            torch.nn.utils.clip_grad_norm_(amp.master_params(self.optimizer_G), 1.0)
+            self.optimizer_D.step()
+        elif self.opt.stage == 'second':
+            self.set_requires_grad([self.netD_A], True)
+            self.optimizer_D.zero_grad()   # set D_A and D_B's gradients to zero
+            self.backward_D_A()      # calculate gradients for D_A
+            loss_D = self.loss_D_A
+            with amp.scale_loss(loss_D, self.optimizer_D, loss_id=1) as scaled_loss:
+                scaled_loss.backward()
+            torch.nn.utils.clip_grad_norm_(amp.master_params(self.optimizer_G), 1.0)
+            self.optimizer_D.step()

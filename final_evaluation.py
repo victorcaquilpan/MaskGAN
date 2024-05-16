@@ -146,7 +146,7 @@ for img_test in [img[0:3] for img in imgs_ct]:
     sct2_c_out = nib.Nifti1Image(sct2_c_out, affine=np.diag([1, 1, 1, 1]))
 
     # Save the NIfTI image to a file
-    print(f'saving images {img_test}')
+    #print(f'saving images {img_test}')
     nib.save(ct_out, f'{two_stage_results}/ct_{img_test}.nii.gz')
     nib.save(sct1_out, f'{two_stage_results}/sct1_{img_test}.nii.gz')
     nib.save(sct2_c_out, f'{two_stage_results}/sct2_{img_test}.nii.gz')

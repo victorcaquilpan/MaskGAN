@@ -113,6 +113,6 @@ for folder in ['real_A','real_B','fake_A','fake_B']:
         nifti_img = nib.Nifti1Image(image3d, affine=np.diag([1, 1, 1, 1]))  # Assuming an identity affine matrix
 
         # Save the NIfTI image to a file
-        print('saving image ', 'vol_results/' + args.final_voxels_folder + folder + '/' + voxel_idx +'.nii.gz')
+        #print('saving image ', 'vol_results/' + args.final_voxels_folder + folder + '/' + voxel_idx +'.nii.gz')
         nib.save(nifti_img, 'vol_results/' + args.final_voxels_folder + folder +'/' + voxel_idx +'.nii.gz')
             

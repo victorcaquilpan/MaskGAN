@@ -63,7 +63,6 @@ class BaseOptions():
         parser.add_argument('--n_slices', type = int, default = 1, help = 'For chunk evaluation, we need to define number of slices')
         parser.add_argument('--stage',type=str,default='first', help='Define which stage you want to run (first or second)')
         parser.add_argument('--include_paired_images', type = bool, default = False, help = 'Define if you want to include paired images')
-        parser.add_argument('--include_refinement_loss',action='store_true', help='Decide if we go to include refinement loss in second-stage')
         parser.add_argument('--include_preservation_loss',action='store_true', help='Decide if we go to include preserving loss in second-stage')
         self.initialized = True
         return parser
