@@ -1,13 +1,13 @@
 import subprocess
 
-name = 'testingrefinementdiscriminatorl1'
+name = 'secondstage_slices_preservationnonremovinglosses_nlayersD5v2_lr00001'
 
-for epoch in range(1,7):
+for epoch in range(1,19):
 
     # # Define the script and its arguments
     scripts_with_args = [("test.py", [
             "--dataroot", "../../data/two_stage_approach/slicing_unsupervised_coronal/",
-            "--gpu_ids", "0",
+            "--gpu_ids", "1",
             "--model", "mask_gan",
             "--name", name,
             "--netG", "att",
