@@ -87,9 +87,10 @@ class UnalignedDataset(BaseDataset):
         self.base_names_B = [img.split("_")[1] if 'paired' in img else img.split("_")[0] for img in self.image_names_B]
 
         # Set a margin to use images from a similar relative position
-        self.position_based_range = opt.position_based_range # This is a percentage
-        # Define the age range
-        self.range_months = opt.range_months
+        if self.opt.phase == 'train':
+            self.position_based_range = opt.position_based_range # This is a percentage
+            # Define the age range    
+            self.range_months = opt.range_months
 
         # To force testing over train set
         try:

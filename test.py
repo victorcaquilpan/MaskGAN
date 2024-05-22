@@ -83,15 +83,17 @@ if __name__ == '__main__':
         visuals['MAE'] = torch.abs(visuals['real_B'] - visuals['fake_B'])
 
         # Get image paths
-        img_path_A = data['A_paths'][0]     
-        img_path_B = data['B_paths'][0]
- 
+        if opt.dataset_mode == 'unaligned_chunks':
+            img_path_A = data['A_paths'][0]     
+            img_path_B = data['B_paths'][0]
+        elif opt.dataset_mode == 'unaligned':
+            img_path_A = data['A_paths']   
+            img_path_B = data['B_paths']
         img_path = model.get_image_paths()     # get image paths
         # if i % 5 == 0:  # save images to an HTML file
         #     print('processing (%04d)-th image... %s' % (i, img_path))
 
         for idx_batch in range(0,visuals['real_A'].shape[0]):
-
                 visuals_real_A = {'real_A' : visuals['real_A'][idx_batch,:,:].unsqueeze(1)}
                 visuals_real_B = {'real_B' : visuals['real_B'][idx_batch,:,:].unsqueeze(1)}
                 visuals_fake_A = {'fake_A': visuals['fake_A'][idx_batch,:,:].unsqueeze(1)}

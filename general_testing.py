@@ -1,24 +1,32 @@
 import subprocess
 
-name = 'secondstage_slices_preservationnonremovinglosses_nlayersD5v2_lr00001'
+name = 'cyclegan'
 
 for epoch in range(1,19):
 
     # # Define the script and its arguments
     scripts_with_args = [("test.py", [
-            "--dataroot", "../../data/two_stage_approach/slicing_unsupervised_coronal/",
-            "--gpu_ids", "1",
-            "--model", "mask_gan",
-            "--name", name,
-            "--netG", "att",
-            "--dataset_mode", "unaligned_chunks",
-            "--preprocess", "none",
-            "--input_nc", "1",
-            "--output_nc", "1",
-            "--no_flip",
-            "--batch_size", "16",
-            "--n_slices", "1",
-            "--epoch", str(epoch),
+            "--dataroot",
+                    "../../data/two_stage_approach/slicing_unsupervised_coronal/",
+                    "--gpu_ids",
+                    "1",
+                    "--model",
+                    "cycle_gan",
+                    "--name",
+                    "cyclegan",
+                    "--netG",
+                    "unet-256",
+                    "--dataset_mode",
+                    "unaligned",
+                    "--preprocess",
+                    "none",
+                    "--no_flip",
+                    "--input_nc", "1",
+                    "--output_nc", "1",
+                    "--batch_size", "16",
+                    "--n_slices", "1",
+                    "--stage", "first",
+                    "--epoch", "best"
         ]),
     ("voxel_creation.py", [
             "--results_folder", f"{name}/",
@@ -26,7 +34,7 @@ for epoch in range(1,19):
             "--size_input", "224"
         ]),
     
-        ("final_evaluation.py", [
+        ("evaluation.py", [
             "--results_folder", f"{name}/",
             "--final_voxels_folder", f"{name}/"
 
