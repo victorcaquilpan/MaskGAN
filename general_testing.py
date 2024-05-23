@@ -1,31 +1,33 @@
 import subprocess
 
-name = 'cyclegan'
+name = 'cyclegan_firststage'
+stage = 'first'
 
-for epoch in range(1,19):
+for epoch in range(1,2):
 
     # # Define the script and its arguments
-    scripts_with_args = [("test.py", [
+    scripts_with_args = [
+        
+        
+        ("test.py", [
             "--dataroot",
-                    "../../data/two_stage_approach/slicing_unsupervised_coronal/",
+                    "../../data/data-2d-unsupervised/",
                     "--gpu_ids",
                     "1",
                     "--model",
                     "cycle_gan",
                     "--name",
-                    "cyclegan",
+                    name,
                     "--netG",
-                    "unet-256",
+                    "unet_256",
                     "--dataset_mode",
                     "unaligned",
                     "--preprocess",
                     "none",
                     "--no_flip",
-                    "--input_nc", "1",
-                    "--output_nc", "1",
                     "--batch_size", "16",
                     "--n_slices", "1",
-                    "--stage", "first",
+                    "--stage", stage,
                     "--epoch", "best"
         ]),
     ("voxel_creation.py", [
@@ -36,7 +38,8 @@ for epoch in range(1,19):
     
         ("evaluation.py", [
             "--results_folder", f"{name}/",
-            "--final_voxels_folder", f"{name}/"
+            "--final_voxels_folder", f"{name}/",
+            "--stage", stage
 
         ])]
 
