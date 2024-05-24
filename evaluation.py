@@ -12,6 +12,7 @@ import os
 from skimage.metrics import structural_similarity
 from math import log10, sqrt 
 import argparse
+from skimage import exposure
 
 # Call the parser
 parser = argparse.ArgumentParser()
@@ -39,7 +40,12 @@ os.makedirs(adjusted_results + 'fake_A/')
 os.makedirs(adjusted_results + 'fake_B/')
 
 # Definition of peak signal noise ratio
-def psnr_function(img_a, img_b, modality): 
+def psnr_function(img_a, img_b, modality):
+
+    # Rescale values to range 0-255
+    img_a = exposure.rescale_intensity(img_a, in_range='image', out_range=(0, 255))
+    img_b = exposure.rescale_intensity(img_b, in_range='image', out_range=(0, 255))
+
     mse = np.mean((img_a - img_b) ** 2) 
     if(mse == 0):  # MSE is zero means no noise is present in the signal . 
                 # Therefore PSNR have no importance. 
@@ -48,7 +54,7 @@ def psnr_function(img_a, img_b, modality):
         max_pixel = 2800.0 # Maximum range
     elif modality == 'ct2mri':
         max_pixel = 2000.0
-    psnr_val = 20 * log10(max_pixel / sqrt(mse)) 
+    psnr_val = 20 * log10(255 / sqrt(mse)) 
     return psnr_val 
 
 def ssim_function(img_a, img_b, modality):
