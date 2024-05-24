@@ -156,7 +156,7 @@ for img_ in real_B:
     if args.stage == 'first':
         r_B = np.pad(r_B, pad_width, mode='constant', constant_values=-800)
         r_A = np.pad(r_A, pad_width, mode='constant', constant_values=0)
-        f_A = np.pad(f_B, pad_width, mode='constant', constant_values=0)
+        f_A = np.pad(f_A, pad_width, mode='constant', constant_values=0)
         f_B = np.pad(f_B, pad_width, mode='constant', constant_values=-800)
     elif args.stage == 'second':
         r_B = np.pad(r_B, pad_width, mode='constant', constant_values=-800)
@@ -289,7 +289,7 @@ if args.stage == 'first':
                     ssim += ssim_val
                     psnr += psnr_val
 
-            print(f"Results in comparison {real_class} with {fake_class} ({args.stage}) - {type}")
+            print(f"Results in comparison {real_class} with {fake_class} ({args.stage} stage) - {type}")
             print('MAE: ', mae/len(real_files))
             print('SSIM: ', ssim/len(real_files))
             print('PSNR: ', psnr/len(real_files))

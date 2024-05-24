@@ -1,40 +1,41 @@
 import subprocess
 
-name = 'testingrefinementloss'
-stage = 'second'
+name = 'cyclegan_firststage'
+stage = 'first'
+model = 'cycle_gan'
+netG = 'unet_256'
 
 for epoch in range(1,2):
 
     # # Define the script and its arguments
     scripts_with_args = [
         
-        
-    #     ("test.py", [
-    #         "--dataroot",
-    #                 "../../data/data-2d-unsupervised/",
-    #                 "--gpu_ids",
-    #                 "1",
-    #                 "--model",
-    #                 "mask_gan",
-    #                 "--name",
-    #                 name,
-    #                 "--netG",
-    #                 "att",
-    #                 "--dataset_mode",
-    #                 "unaligned",
-    #                 "--preprocess",
-    #                 "none",
-    #                 "--no_flip",
-    #                 "--batch_size", "16",
-    #                 "--n_slices", "1",
-    #                 "--stage", stage,
-    #                 "--epoch", "best"
-    #     ]),
-    # ("voxel_creation.py", [
-    #         "--results_folder", f"{name}/",
-    #         "--final_voxels_folder", f"{name}/",
-    #         "--size_input", "224"
-    #     ]),
+        ("test.py", [
+            "--dataroot",
+                    "../../data/data-2d-unsupervised/",
+                    "--gpu_ids",
+                    "1",
+                    "--model",
+                    model,
+                    "--name",
+                    name,
+                    "--netG",
+                    netG,
+                    "--dataset_mode",
+                    "unaligned",
+                    "--preprocess",
+                    "none",
+                    "--no_flip",
+                    "--batch_size", "16",
+                    "--n_slices", "1",
+                    "--stage", stage,
+                    "--epoch", "best"
+        ]),
+    ("voxel_creation.py", [
+            "--results_folder", f"{name}/",
+            "--final_voxels_folder", f"{name}/",
+            "--size_input", "224"
+        ]),
     
         ("evaluation.py", [
             "--results_folder", f"{name}/",

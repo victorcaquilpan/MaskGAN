@@ -98,7 +98,7 @@ class UnalignedDataset(BaseDataset):
         except:
             self.force_testing = False
 
-        if self.opt.phase != 'test' and not self.force_testing:
+        if self.opt.phase != 'test' and not self.force_testing and self.opt.feature_images_file_path != '':
             # Loading the CSV file
             self.feature_images = pd.read_csv(opt.feature_images_file_path)
             # Remove duplicate rows
@@ -165,11 +165,13 @@ class UnalignedDataset(BaseDataset):
             # Convert to a number
             A_relative_position = float(A_relative_position)
             # Get the age of that image
-            A_months = self.ages_images_A[index_A]
+            if self.opt.feature_images_file_path != '':
+                A_months = self.ages_images_A[index_A]
             # Obtain the images in a similar range (Position based selection)
             potential_indexes = [index for index, value in enumerate(self.relative_pos_B) if (A_relative_position-self.position_based_range) <= value <= (A_relative_position + self.position_based_range)]
             # Select images which are in a similar age
-            potential_indexes_months = [index for index, value in enumerate(self.ages_images_B) if (A_months-self.range_months) <= value <= (A_months + self.range_months)]
+            if self.opt.feature_images_file_path != '':
+                potential_indexes_months = [index for index, value in enumerate(self.ages_images_B) if (A_months-self.range_months) <= value <= (A_months + self.range_months)]
             # Considering inclusion of paired dataset, we need to select images from the paired CT scan
             #paired_img = self.paired_imgs_A[index_A]
             if paired:
@@ -178,7 +180,8 @@ class UnalignedDataset(BaseDataset):
                 potential_indexes = list(set(potential_indexes) & set(potential_indexes_paired))
 
             # Define position of B image
-            potential_indexes = list(set(potential_indexes) & set(potential_indexes_months))
+            if self.opt.feature_images_file_path != '':
+                potential_indexes = list(set(potential_indexes) & set(potential_indexes_months))
             index_position = random.randint(0, len(potential_indexes) - 1)
             index_B = potential_indexes[index_position]
             
