@@ -18,6 +18,7 @@ import imageio
 from scipy import ndimage
 from skimage.morphology import binary_erosion, binary_dilation
 import nibabel as nib
+from dipy.segment.mask import median_otsu
 
 def visualize(img, filename, step=10):
     shapes = img.shape
@@ -158,10 +159,6 @@ def save_slice(img, mask, data_dir, data_mask_dir, filename):
     img = np.pad(img, pad_width, mode='constant', constant_values=0)
     mask = resize_volume(mask, 214,214,214)
     mask = np.pad(mask, pad_width, mode='constant', constant_values=0)
-    
-    # kernel = np.ones((10,10), np.uint8) # Define the kernel size
-    # dilated_mask = cv2.dilate(m.astype(np.uint8), kernel, iterations = 2)
-    # im[dilated_mask == 0] = 0
 
 
     for i in range(len(img)):
@@ -210,65 +207,62 @@ ct_files_test = ct_imgs[29:]
 mri_files_test = mri_imgs[29:]
 
 resample=(1.0, 1.0, 1.0)
-th_ct = 50
-th_mri = 10
+th_ct = 0
+th_mri = 30
 # Set clip CT intensity
-min_ct, max_ct = -800, 2000
+min_ct, max_ct = -1000, 3500
 #th = 10 # Consider pixel less than certain threshold as background (remove noise, artifacts)
 
 results = 'vis'
 os.makedirs(results, exist_ok=True)
 
 crop = 0.0
-crop_h = 0.9
+crop_h = 1
 
-print("Creating MR images for training")
-for idx, filepath in enumerate(mri_files_train):
+# print("Creating MR images for training")
+# for idx, filepath in enumerate(mri_files_train):
 
-    mri = nib.load(filepath)
-    mri = mri.get_fdata()
-    # Check nan values
-    nan_mask = np.isnan(mri)
-    # Replace NaN values with a specific value
-    mri[nan_mask] = np.nanmin(mri)
+#     mri = nib.load(filepath)
+#     mri = mri.get_fdata()
+#     # Check nan values
+#     nan_mask = np.isnan(mri)
+#     # Replace NaN values with a specific value
+#     mri[nan_mask] = np.nanmin(mri)
 
-    #filename = os.path.splitext(os.path.basename(filepath))[0]
-    mri, mask = get_3d_mask(mri, min_=0, th=th_mri, width=10)
-    # Our scans have irregular size, crop to adjust, comment out as needed
-    mri, mask = crop_scan(mri, mask, crop,crop_h)
+#     #filename = os.path.splitext(os.path.basename(filepath))[0]
+#     mri, mask = get_3d_mask(mri, min_=0, th=th_mri, width=10)
+#     # Our scans have irregular size, crop to adjust, comment out as needed
+#     mri, mask = crop_scan(mri, mask, crop,crop_h)
 
-    mri = mri.astype('uint8')
-    mask = mask.astype('uint8')
+#     mri = mri.astype('uint8')
+#     mask = mask.astype('uint8')
 
-    # Remove noise
-    # Define the structure element for erosion
-    selem_ero = np.ones((1, 1, 1), dtype=bool) 
-    selem_dil = np.ones((10, 10, 10), dtype=bool) 
-    # Perform erosion on the entire 3D array
-    eroded_mask = binary_erosion(mask, selem_ero)
-    mri[eroded_mask == 0] = 0
-    mask[eroded_mask == 0] = 0
-    dilated_mask = binary_dilation(mask, selem_dil)
-    mri[dilated_mask == 0] = 0
-    mask[dilated_mask== 0] = 0
+#     # Remove noise
+#     # Define the structure element for erosion
+#     selem_ero = np.ones((1, 1, 1), dtype=bool) 
+#     selem_dil = np.ones((14, 14, 14), dtype=bool) 
+#     # Perform erosion on the entire 3D array
+#     eroded_mask = binary_erosion(mask, selem_ero)
+#     mask[eroded_mask == 0] = 0
+#     dilated_mask = binary_dilation(mask, selem_dil)
+#     mri[dilated_mask == 0] = 0
+#     mask[dilated_mask== 0] = 0
 
-    # Remove images with zero values in the mask
-    non_zero_slices_mask_axis1_2 = np.any(mask, axis=(1, 2))
-    mri = mri[non_zero_slices_mask_axis1_2]
-    mask = mask[non_zero_slices_mask_axis1_2]
-    non_zero_slices_mask_axis0_1 = np.any(mask, axis=(0, 1))
-    mri = mri[:,:,non_zero_slices_mask_axis0_1]
-    mask = mask[:,:,non_zero_slices_mask_axis0_1]
-    non_zero_slices_mask_axis0_2 = np.any(mask, axis=(0, 2))
-    mri = mri[:,non_zero_slices_mask_axis0_2,:]
-    mask = mask[:,non_zero_slices_mask_axis0_2,:]
+#     # Remove images with zero values in the mask
+#     non_zero_slices_mask_axis1_2 = np.any(mask, axis=(1, 2))
+#     mri = mri[non_zero_slices_mask_axis1_2]
+#     mask = mask[non_zero_slices_mask_axis1_2]
+#     non_zero_slices_mask_axis0_1 = np.any(mask, axis=(0, 1))
+#     mri = mri[:,:,non_zero_slices_mask_axis0_1]
+#     mask = mask[:,:,non_zero_slices_mask_axis0_1]
+#     non_zero_slices_mask_axis0_2 = np.any(mask, axis=(0, 2))
+#     mri = mri[:,non_zero_slices_mask_axis0_2,:]
+#     mask = mask[:,non_zero_slices_mask_axis0_2,:]
 
-    # Enter the name of the file
-    filename = str(idx)
-    save_slice(mri, mask, output_mri_dir, output_mri_mask_dir, filename)
+#     # Enter the name of the file
+#     filename = str(idx).zfill(3)
+#     save_slice(mri, mask, output_mri_dir, output_mri_mask_dir, filename)
     
-    # visualize(mri, f'{results}/mri')
-    # visualize(mask, f'{results}/mri_mask')
 
 print("Creating CT images for training")
 for idx, filepath in enumerate(ct_files_train): 
@@ -288,10 +282,9 @@ for idx, filepath in enumerate(ct_files_train):
     # Remove noise
      # Define the structure element for erosion
     selem_ero = np.ones((1, 1, 1), dtype=bool) 
-    selem_dil = np.ones((10, 10, 10), dtype=bool) 
+    selem_dil = np.ones((14, 14, 14), dtype=bool) 
     # Perform erosion on the entire 3D array
     eroded_mask = binary_erosion(mask, selem_ero)
-    ct[eroded_mask == 0] = 0
     mask[eroded_mask == 0] = 0
     dilated_mask = binary_dilation(mask, selem_dil)
     ct[dilated_mask == 0] = 0
@@ -311,7 +304,7 @@ for idx, filepath in enumerate(ct_files_train):
     mask = mask[:,non_zero_slices_mask_axis0_2,:]
 
     # Enter the name of the file
-    filename = str(idx) 
+    filename = str(idx).zfill(3)
     save_slice(ct, mask, output_ct_dir, output_ct_mask_dir, filename)
 
 ### VALIDATION
@@ -349,7 +342,6 @@ for mri_path, ct_path in zip(mri_files_val,ct_files_val):
 
     # Getting a uniform mask template for paired images
     uniform_mask = mri_mask * ct_mask
-
     ct, mri, uniform_mask = crop_scan_paired(ct, mri, uniform_mask,crop,crop_h)
     mri_mask = uniform_mask
     ct_mask = uniform_mask
@@ -361,17 +353,15 @@ for mri_path, ct_path in zip(mri_files_val,ct_files_val):
 
     # Remove noise
     selem_ero = np.ones((1, 1, 1), dtype=bool) 
-    selem_dil = np.ones((10, 10, 10), dtype=bool) 
+    selem_dil = np.ones((14, 14, 14), dtype=bool) 
     # Perform erosion on the entire 3D array
     eroded_mask = binary_erosion(ct_mask, selem_ero)
-    ct[eroded_mask == 0] = 0
     ct_mask[eroded_mask == 0] = 0
     dilated_mask = binary_dilation(ct_mask, selem_dil)
     ct[dilated_mask == 0] = 0
     ct_mask[dilated_mask== 0] = 0
     # Perform erosion on the entire 3D array
     eroded_mask = binary_erosion(mri_mask, selem_ero)
-    mri[eroded_mask == 0] = 0
     mri_mask[eroded_mask == 0] = 0
     dilated_mask = binary_dilation(mri_mask, selem_dil)
     mri[dilated_mask == 0] = 0
@@ -399,7 +389,7 @@ for mri_path, ct_path in zip(mri_files_val,ct_files_val):
     mri_mask = mri_mask[:,non_zero_slices_mask_axis0_2,:]
 
     # Enter the name of the file
-    filename = idxs
+    filename = str(idxs).zfill(3)
     save_slice(mri, mri_mask, output_mri_dir, output_mri_mask_dir, filename)
     save_slice(ct, ct_mask, output_ct_dir, output_ct_mask_dir, filename)
 
@@ -450,17 +440,15 @@ for mri_path, ct_path in zip(mri_files_test,ct_files_test):
 
     # Remove noise
     selem_ero = np.ones((1, 1, 1), dtype=bool) 
-    selem_dil = np.ones((10, 10, 10), dtype=bool) 
+    selem_dil = np.ones((14, 14, 14), dtype=bool) 
     # Perform erosion on the entire 3D array
     eroded_mask = binary_erosion(ct_mask, selem_ero)
-    ct[eroded_mask == 0] = 0
     ct_mask[eroded_mask == 0] = 0
     dilated_mask = binary_dilation(ct_mask, selem_dil)
     ct[dilated_mask == 0] = 0
     ct_mask[dilated_mask== 0] = 0
     # Perform erosion on the entire 3D array
     eroded_mask = binary_erosion(mri_mask, selem_ero)
-    mri[eroded_mask == 0] = 0
     mri_mask[eroded_mask == 0] = 0
     dilated_mask = binary_dilation(mri_mask, selem_dil)
     mri[dilated_mask == 0] = 0
@@ -488,7 +476,7 @@ for mri_path, ct_path in zip(mri_files_test,ct_files_test):
     mri_mask = mri_mask[:,non_zero_slices_mask_axis0_2,:]
 
     # Enter the name of the file
-    filename = idxs
+    filename = str(idxs).zfill(3)
     save_slice(mri, mri_mask, output_mri_dir, output_mri_mask_dir, filename)
     save_slice(ct, ct_mask, output_ct_dir, output_ct_mask_dir, filename)
     idxs += 1
