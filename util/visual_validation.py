@@ -119,7 +119,7 @@ def validation(val_set, model, opt):
                 fakeB_wb = ((fakeB_wb + 1) * 127.5).astype(np.uint8)
                 fakeB_wb = PIL.Image.fromarray(np.squeeze(fakeB_wb))
                 fakeB_wb = fakeB_wb.convert("L")
-                    
+          
     # Send data to Wandb
     if opt.report_wandb: 
         wandb.log({"val/examples": [wandb.Image(imgA_wb, caption="realA"),wandb.Image(imgB_wb, caption="realB"),wandb.Image(fakeB_wb, caption="fakeB")]})                                     

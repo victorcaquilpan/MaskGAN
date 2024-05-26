@@ -219,49 +219,48 @@ os.makedirs(results, exist_ok=True)
 crop = 0.0
 crop_h = 1
 
-# print("Creating MR images for training")
-# for idx, filepath in enumerate(mri_files_train):
+print("Creating MR images for training")
+for idx, filepath in enumerate(mri_files_train):
+        mri = nib.load(filepath)
+        mri = mri.get_fdata()
+        # Check nan values
+        nan_mask = np.isnan(mri)
+        # Replace NaN values with a specific value
+        mri[nan_mask] = np.nanmin(mri)
 
-#     mri = nib.load(filepath)
-#     mri = mri.get_fdata()
-#     # Check nan values
-#     nan_mask = np.isnan(mri)
-#     # Replace NaN values with a specific value
-#     mri[nan_mask] = np.nanmin(mri)
+        #filename = os.path.splitext(os.path.basename(filepath))[0]
+        mri, mask = get_3d_mask(mri, min_=0, th=th_mri, width=10)
+        # Our scans have irregular size, crop to adjust, comment out as needed
+        mri, mask = crop_scan(mri, mask, crop,crop_h)
 
-#     #filename = os.path.splitext(os.path.basename(filepath))[0]
-#     mri, mask = get_3d_mask(mri, min_=0, th=th_mri, width=10)
-#     # Our scans have irregular size, crop to adjust, comment out as needed
-#     mri, mask = crop_scan(mri, mask, crop,crop_h)
+        mri = mri.astype('uint8')
+        mask = mask.astype('uint8')
 
-#     mri = mri.astype('uint8')
-#     mask = mask.astype('uint8')
+        # Remove noise
+        # Define the structure element for erosion
+        selem_ero = np.ones((1, 1, 1), dtype=bool) 
+        selem_dil = np.ones((14, 14, 14), dtype=bool) 
+        # Perform erosion on the entire 3D array
+        eroded_mask = binary_erosion(mask, selem_ero)
+        mask[eroded_mask == 0] = 0
+        dilated_mask = binary_dilation(mask, selem_dil)
+        mri[dilated_mask == 0] = 0
+        mask[dilated_mask== 0] = 0
 
-#     # Remove noise
-#     # Define the structure element for erosion
-#     selem_ero = np.ones((1, 1, 1), dtype=bool) 
-#     selem_dil = np.ones((14, 14, 14), dtype=bool) 
-#     # Perform erosion on the entire 3D array
-#     eroded_mask = binary_erosion(mask, selem_ero)
-#     mask[eroded_mask == 0] = 0
-#     dilated_mask = binary_dilation(mask, selem_dil)
-#     mri[dilated_mask == 0] = 0
-#     mask[dilated_mask== 0] = 0
+        # Remove images with zero values in the mask
+        non_zero_slices_mask_axis1_2 = np.any(mask, axis=(1, 2))
+        mri = mri[non_zero_slices_mask_axis1_2]
+        mask = mask[non_zero_slices_mask_axis1_2]
+        non_zero_slices_mask_axis0_1 = np.any(mask, axis=(0, 1))
+        mri = mri[:,:,non_zero_slices_mask_axis0_1]
+        mask = mask[:,:,non_zero_slices_mask_axis0_1]
+        non_zero_slices_mask_axis0_2 = np.any(mask, axis=(0, 2))
+        mri = mri[:,non_zero_slices_mask_axis0_2,:]
+        mask = mask[:,non_zero_slices_mask_axis0_2,:]
 
-#     # Remove images with zero values in the mask
-#     non_zero_slices_mask_axis1_2 = np.any(mask, axis=(1, 2))
-#     mri = mri[non_zero_slices_mask_axis1_2]
-#     mask = mask[non_zero_slices_mask_axis1_2]
-#     non_zero_slices_mask_axis0_1 = np.any(mask, axis=(0, 1))
-#     mri = mri[:,:,non_zero_slices_mask_axis0_1]
-#     mask = mask[:,:,non_zero_slices_mask_axis0_1]
-#     non_zero_slices_mask_axis0_2 = np.any(mask, axis=(0, 2))
-#     mri = mri[:,non_zero_slices_mask_axis0_2,:]
-#     mask = mask[:,non_zero_slices_mask_axis0_2,:]
-
-#     # Enter the name of the file
-#     filename = str(idx).zfill(3)
-#     save_slice(mri, mask, output_mri_dir, output_mri_mask_dir, filename)
+        # Enter the name of the file
+        filename = str(idx).zfill(3)
+        save_slice(mri, mask, output_mri_dir, output_mri_mask_dir, filename)
     
 
 print("Creating CT images for training")
@@ -340,11 +339,9 @@ for mri_path, ct_path in zip(mri_files_val,ct_files_val):
     ct[nan_mask] = np.nanmin(ct)
     ct, ct_mask = get_3d_mask(ct, min_=min_ct, max_=max_ct, th=th_ct)
 
-    # Getting a uniform mask template for paired images
-    uniform_mask = mri_mask * ct_mask
-    ct, mri, uniform_mask = crop_scan_paired(ct, mri, uniform_mask,crop,crop_h)
-    mri_mask = uniform_mask
-    ct_mask = uniform_mask
+    # Crop masks
+    ct, ct_mask = crop_scan(ct, ct_mask, crop,crop_h)
+    mri, mri_mask = crop_scan(mri, mri_mask, crop,crop_h)
     
     ct = ct.astype('uint8')
     ct_mask = ct_mask.astype('uint8')
@@ -426,12 +423,9 @@ for mri_path, ct_path in zip(mri_files_test,ct_files_test):
     ct[nan_mask] = np.nanmin(ct)
     ct, ct_mask = get_3d_mask(ct, min_=min_ct, max_=max_ct, th=th_ct)
 
-    # Getting a uniform mask template for paired images
-    uniform_mask = mri_mask * ct_mask
-    # Our scans have irregular size, crop to adjust, comment out as needed
-    ct, mri, uniform_mask = crop_scan_paired(ct, mri, uniform_mask,crop,crop_h)
-    mri_mask = uniform_mask
-    ct_mask = uniform_mask
+    # Crop masks
+    ct, ct_mask = crop_scan(ct, ct_mask, crop,crop_h)
+    mri, mri_mask = crop_scan(mri, mri_mask, crop,crop_h)
 
     ct = ct.astype('uint8')
     ct_mask = ct_mask.astype('uint8')
