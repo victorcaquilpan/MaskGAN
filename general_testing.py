@@ -1,8 +1,9 @@
 import subprocess
 
-name = 'cyclegan_firststage'
+name = 'shapecyclegan_firststage_pediatric'
+dataset = "../../data/data-2d-unsupervised/"
 stage = 'first'
-model = 'cycle_gan'
+model = 'shape_cycle_gan'
 netG = 'unet_256'
 
 for epoch in range(1,2):
@@ -12,7 +13,7 @@ for epoch in range(1,2):
         
         ("test.py", [
             "--dataroot",
-                    "../../data/data-2d-unsupervised/",
+                    dataset,
                     "--gpu_ids",
                     "1",
                     "--model",
