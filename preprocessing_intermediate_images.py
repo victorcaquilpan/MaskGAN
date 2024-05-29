@@ -147,7 +147,7 @@ def save_slice(img, mask, data_dir, data_mask_dir, filename):
 print("Defining main directories")
 
 ### TRAIN
-out_dir = '../../data/two_stage_approach/slicing_unsupervised_coronal'
+out_dir = '../../data/intermediate_2d_images/maskgan_firststage_pediatric_coronal_ct/'
 
 # Remove output folder if already exists
 if os.path.exists(out_dir):
@@ -156,13 +156,13 @@ if os.path.exists(out_dir):
 os.makedirs(out_dir)
 
 # Define the sct folder input
-root_intermediate = '../../data/two_stage_approach/intermediate_voxels/unsupervised_steplr/'
-train_sct_root =  root_intermediate + 'train/sct/'
-val_sct_root =  root_intermediate + 'val/sct/'
-test_sct_root =  root_intermediate + 'test/sct/'
-train_ct_root =  root_intermediate + 'train/ct/'
-val_ct_root =  root_intermediate + 'val/ct/'
-test_ct_root =  root_intermediate + 'test/ct/'
+root_intermediate = '../../data/intermediate_3d_images/maskgan_firststage_pediatric/'
+train_sct_root =  root_intermediate + 'train/fake_B/'
+val_sct_root =  root_intermediate + 'val/fake_B/'
+test_sct_root =  root_intermediate + 'test/fake_B/'
+train_ct_root =  root_intermediate + 'train/real_B/'
+val_ct_root =  root_intermediate + 'val/real_B/'
+test_ct_root =  root_intermediate + 'test/real_B/'
 
 # Extract the images
 train_ct = train_ct_root + '*.nii.gz'
@@ -197,11 +197,6 @@ crop = 0.0
 crop_h = 0
 resample = [1.0, 1.0, 1.0]
 
-# Sort the paired dataset
-print("Creating the paired images for training")
-mri_paired_files_train = [path for path in sct_files_train if 'paired' in path]
-ct_paired_files_train = [path for path in ct_files_train if 'paired' in path]
-
 # We go to consider two orientations. Axial and Coronal
 for orientation in ['coronal']:
     print(f"Creating sCT images for training for {orientation} orientation")
@@ -213,31 +208,15 @@ for orientation in ['coronal']:
             sct = np.rot90(sct,axes = (2,1))
         elif orientation == 'coronal':
             sct = np.rot90(sct, axes = (0,1))
+            sct = np.rot90(sct, axes = (1,2))
         
         sct, mask = get_3d_mask(sct, min_=min_ct, max_= max_ct, th=th_ct)
-        # Our scans have irregular size, crop to adjust, comment out as needed
-        # sct, mask = crop_scan(sct, mask, crop,crop_h)
-
-        # # Remove images with zero values in the mask
-        # non_zero_slices_mask_axis1_2 = np.any(mask, axis=(1, 2))
-        # sct = sct[non_zero_slices_mask_axis1_2]
-        # mask = mask[non_zero_slices_mask_axis1_2]
-        # non_zero_slices_mask_axis0_1 = np.any(mask, axis=(0, 1))
-        # sct = sct[:,:,non_zero_slices_mask_axis0_1]
-        # mask = mask[:,:,non_zero_slices_mask_axis0_1]
-        # non_zero_slices_mask_axis0_2 = np.any(mask, axis=(0, 2))
-        # sct = sct[:,non_zero_slices_mask_axis0_2,:]
-        # mask = mask[:,non_zero_slices_mask_axis0_2,:]
-
         # Enter the name of the file
         filename = filepath.split('/')[-1].replace('.nii.gz','')
         # Create a generic format
         filename = filename.zfill(3)
         # filename = f'{orientation}_{filename}'
         save_slice(sct, mask, output_sct_dir, output_sct_mask_dir, filename)
-        
-        visualize(sct, f'{results}/sct')
-        visualize(mask, f'{results}/sct_mask')
         print(f'Saving {filename} image')
 
     print("Creating CT images for training")
@@ -249,32 +228,17 @@ for orientation in ['coronal']:
             ct = np.rot90(ct,axes = (2,1))
         elif orientation == 'coronal':
             ct = np.rot90(ct, axes = (0,1))
+            ct = np.rot90(ct, axes = (1,2))
 
         #ct = ants.resample_image(ct, resample, False, 1)
         ct, mask = get_3d_mask(ct, min_=min_ct, max_=max_ct, th=th_ct)
-        # Our scans have irregular size, crop to adjust, comment out as needed
-        # ct, mask = crop_scan(ct, mask, crop,crop_h)
-
-        # # Remove images with zero values in the mask
-        # non_zero_slices_mask_axis1_2 = np.any(mask, axis=(1, 2))
-        # ct = ct[non_zero_slices_mask_axis1_2]
-        # mask = mask[non_zero_slices_mask_axis1_2]
-        # non_zero_slices_mask_axis0_1 = np.any(mask, axis=(0, 1))
-        # ct = ct[:,:,non_zero_slices_mask_axis0_1]
-        # mask = mask[:,:,non_zero_slices_mask_axis0_1]
-        # non_zero_slices_mask_axis0_2 = np.any(mask, axis=(0, 2))
-        # ct = ct[:,non_zero_slices_mask_axis0_2,:]
-        # mask = mask[:,non_zero_slices_mask_axis0_2,:]
 
         # Enter the name of the file
         filename = filepath.split('/')[-1].replace('.nii.gz','')
         # Create a generic format
         filename = filename.zfill(3)
         # filename = f'{orientation}_{filename}'
-
         save_slice(ct, mask, output_ct_dir, output_ct_mask_dir, filename)
-        visualize(ct, f'{results}/ct')
-        visualize(mask, f'{results}/ct_mask')   
         print(f'Saving {filename} image')
 
 ### VALIDATION
@@ -302,6 +266,7 @@ for orientation in ['coronal']:
             sct = np.rot90(sct,axes = (2,1))
         elif orientation == 'coronal':
             sct = np.rot90(sct, axes = (0,1))
+            sct = np.rot90(sct, axes = (1,2))
         sct, sct_mask = get_3d_mask(sct, min_=min_ct, max_= max_ct, th=th_ct)
 
         ct = ants.image_read(ct_path).numpy()
@@ -310,38 +275,17 @@ for orientation in ['coronal']:
             ct = np.rot90(ct,axes = (2,1))
         elif orientation == 'coronal':
             ct = np.rot90(ct, axes = (0,1))
+            ct = np.rot90(ct, axes = (1,2))
         #ct = ants.resample_image(ct, resample, False, 1)
         ct, ct_mask = get_3d_mask(ct, min_=min_ct, max_=max_ct, th=th_ct)
-
-        # Getting a uniform mask template for paired images
-       # uniform_mask = sct_mask * ct_mask
-
-        # Our scans have irregular size, crop to adjust, comment out as needed
-        # sct, ct, uniform_mask = crop_scan_paired(sct, ct, uniform_mask, crop,crop_h)
-
-        # # Remove images with zero values in the mask
-        # non_zero_slices_mask_axis1_2 = np.any(uniform_mask, axis=(1, 2))
-        # sct = sct[non_zero_slices_mask_axis1_2]
-        # ct = ct[non_zero_slices_mask_axis1_2]
-        # uniform_mask = uniform_mask[non_zero_slices_mask_axis1_2]
-        # non_zero_slices_mask_axis0_1 = np.any(uniform_mask, axis=(0, 1))
-        # sct = sct[:,:,non_zero_slices_mask_axis0_1]
-        # ct = ct[:,:,non_zero_slices_mask_axis0_1]
-        # uniform_mask = uniform_mask[:,:,non_zero_slices_mask_axis0_1]
-        # non_zero_slices_mask_axis0_2 = np.any(uniform_mask, axis=(0, 2))
-        # sct = sct[:,non_zero_slices_mask_axis0_2,:]
-        # ct = ct[:,non_zero_slices_mask_axis0_2,:]
-        # uniform_mask = uniform_mask[:,non_zero_slices_mask_axis0_2,:]
 
         # Enter the name of the file
         filename = sct_path.split('/')[-1].replace('.nii.gz','')
         # Create a generic format
         filename = filename.zfill(3)
-        # filename = f'{orientation}_{filename}'
-        
+        print(f'Saving {filename} image')
         save_slice(sct, sct_mask, output_sct_dir, output_sct_mask_dir, filename)
         save_slice(ct, ct_mask, output_ct_dir, output_ct_mask_dir, filename)
-        print(f'Saving {filename} image')
 
 ### TESTING
 output_ct_dir = f'{out_dir}/test_B'
@@ -367,6 +311,7 @@ for orientation in ['coronal']:
             sct = np.rot90(sct,axes = (2,1))
         elif orientation == 'coronal':
             sct = np.rot90(sct, axes = (0,1))
+            sct = np.rot90(sct, axes = (1,2))
 
         sct, sct_mask = get_3d_mask(sct, min_=min_ct, max_= max_ct, th=th_ct)
 
@@ -376,35 +321,14 @@ for orientation in ['coronal']:
             ct = np.rot90(ct,axes = (2,1))
         elif orientation == 'coronal':
             ct = np.rot90(ct, axes = (0,1))
+            ct = np.rot90(ct, axes = (1,2))
         #ct = ants.resample_image(ct, resample, False, 1)
         ct, ct_mask = get_3d_mask(ct, min_=min_ct, max_=max_ct, th=th_ct)
-
-        # # Getting a uniform mask template for paired images
-        # uniform_mask = sct_mask * ct_mask
-
-        # # Our scans have irregular size, crop to adjust, comment out as needed
-        # sct, ct, uniform_mask = crop_scan_paired(sct, ct, uniform_mask, crop,crop_h)
-
-        # # Remove images with zero values in the mask
-        # non_zero_slices_mask_axis1_2 = np.any(uniform_mask, axis=(1, 2))
-        # sct = sct[non_zero_slices_mask_axis1_2]
-        # ct = ct[non_zero_slices_mask_axis1_2]
-        # uniform_mask = uniform_mask[non_zero_slices_mask_axis1_2]
-        # non_zero_slices_mask_axis0_1 = np.any(uniform_mask, axis=(0, 1))
-        # sct = sct[:,:,non_zero_slices_mask_axis0_1]
-        # ct = ct[:,:,non_zero_slices_mask_axis0_1]
-        # uniform_mask = uniform_mask[:,:,non_zero_slices_mask_axis0_1]
-        # non_zero_slices_mask_axis0_2 = np.any(uniform_mask, axis=(0, 2))
-        # sct = sct[:,non_zero_slices_mask_axis0_2,:]
-        # ct = ct[:,non_zero_slices_mask_axis0_2,:]
-        # uniform_mask = uniform_mask[:,non_zero_slices_mask_axis0_2,:]
 
         # Enter the name of the file
         filename = sct_path.split('/')[-1].replace('.nii.gz','')
         # Create a generic format
         filename = filename.zfill(3)
-        # filename = f'{orientation}_{filename}'
-        
         save_slice(sct, sct_mask, output_sct_dir, output_sct_mask_dir, filename)
         save_slice(ct, ct_mask, output_ct_dir, output_ct_mask_dir, filename)
         print(f'Saving {filename} image')

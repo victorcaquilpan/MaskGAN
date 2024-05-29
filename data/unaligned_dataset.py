@@ -87,7 +87,7 @@ class UnalignedDataset(BaseDataset):
         self.base_names_B = [img.split("_")[1] if 'paired' in img else img.split("_")[0] for img in self.image_names_B]
 
         # Set a margin to use images from a similar relative position
-        if self.opt.phase == 'train':
+        if self.opt.phase == 'train' and self.opt.position_based_range != -99:
             self.position_based_range = opt.position_based_range # This is a percentage
             # Define the age range    
             self.range_months = opt.range_months
@@ -173,7 +173,6 @@ class UnalignedDataset(BaseDataset):
             if self.opt.feature_images_file_path != '':
                 potential_indexes_months = [index for index, value in enumerate(self.ages_images_B) if (A_months-self.range_months) <= value <= (A_months + self.range_months)]
             # Considering inclusion of paired dataset, we need to select images from the paired CT scan
-            #paired_img = self.paired_imgs_A[index_A]
             if paired:
                 base_img = self.base_names_A[index_A]
                 potential_indexes_paired = [idx for idx, img in enumerate(self.base_names_B) if base_img == img]

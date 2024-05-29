@@ -1,12 +1,12 @@
 import subprocess
 
-name = 'shapecyclegan_firststage_pediatric'
-dataset = "../../data/data-2d-unsupervised/"
-stage = 'first'
-model = 'shape_cycle_gan'
-netG = 'unet_256'
+name = 'maskgan_secondtstage_adult'
+dataset = "../../data/intermediate_2d_images/maskgan_firststage_adult_coronal/"
+stage = 'second'
+model = 'mask_gan'
+netG = 'att'
 
-for epoch in range(1,2):
+for epoch in range(35,42):
 
     # # Define the script and its arguments
     scripts_with_args = [
@@ -15,7 +15,7 @@ for epoch in range(1,2):
             "--dataroot",
                     dataset,
                     "--gpu_ids",
-                    "1",
+                    "0",
                     "--model",
                     model,
                     "--name",
@@ -27,10 +27,10 @@ for epoch in range(1,2):
                     "--preprocess",
                     "none",
                     "--no_flip",
-                    "--batch_size", "16",
+                    "--batch_size", "96",
                     "--n_slices", "1",
                     "--stage", stage,
-                    "--epoch", "best"
+                    "--epoch", str(epoch)
         ]),
     ("voxel_creation.py", [
             "--results_folder", f"{name}/",

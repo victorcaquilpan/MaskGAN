@@ -21,7 +21,6 @@ parser.add_argument('--final_voxels_folder', default='secondstage_solved/', help
 parser.add_argument('--stage', default='second', help='first or second')
 args = parser.parse_args()
 
-
 real_B_path = 'vol_results/' + args.results_folder  +'real_B/'
 real_A_path = 'vol_results/' + args.results_folder + 'real_A/'
 fake_B_path = 'vol_results/' + args.results_folder  +'fake_B/'
@@ -121,7 +120,26 @@ for img_ in real_B:
     r_A = remove_background(r_A)
     f_A = remove_background(f_A)
     f_B = remove_background(f_B)
-    
+
+    # Change orientation
+    if args.stage == 'second':
+        f_A = np.rot90(f_A, axes = (2,0))
+        f_A = np.rot90(f_A, k = 2, axes = (0,1))
+        f_A = np.flip(f_A,axis = (1,2))
+        
+        f_B = np.rot90(f_B, axes = (2,0))
+        f_B = np.rot90(f_B, k = 2, axes = (0,1))
+        f_B = np.flip(f_B,axis = (1,2))
+
+        r_B = np.rot90(r_B, axes = (2,0))
+        r_B = np.rot90(r_B, k = 2, axes = (0,1))
+        r_B = np.flip(r_B,axis = (1,2))
+
+        r_A = np.rot90(r_A, axes = (2,0))
+        r_A = np.rot90(r_A, k = 2, axes = (0,1))
+        r_A = np.flip(r_A,axis = (1,2))
+
+
     # # Resizing
     r_B = resize_volume(r_B)
     r_A = resize_volume(r_A)

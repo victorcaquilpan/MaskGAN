@@ -38,7 +38,6 @@ import torch
 
 if __name__ == '__main__':
     opt = TestOptions().parse()  # get test options
-    
     opt.num_threads = 0   # test code only supports num_threads = 1
     opt.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
     opt.no_flip = True    # no flip; comment this line if results on flipped images are needed.
@@ -73,10 +72,8 @@ if __name__ == '__main__':
     if opt.eval:
         model.eval()
     for i, data in enumerate(dataset):
-
         if opt.num_test > 0 and i >= opt.num_test:  # only apply our model to opt.num_test images.
             break
-
         model.set_input(data)  # unpack data from data loader
         model.test()           # run inference
         visuals = model.get_current_visuals()  # get image results
