@@ -1,12 +1,13 @@
 import subprocess
 
-name = 'maskgan_secondtstage_adult'
-dataset = "../../data/intermediate_2d_images/maskgan_firststage_adult_coronal/"
+name = 'maskgan_seconstage_ct'
+dataset = "../../data/maskgan_firststage_pediatric_coronal_ct/"
 stage = 'second'
 model = 'mask_gan'
 netG = 'att'
+modality = "mri2ct"
 
-for epoch in range(35,42):
+for epoch in range(3,4):
 
     # # Define the script and its arguments
     scripts_with_args = [
@@ -41,7 +42,8 @@ for epoch in range(35,42):
         ("evaluation.py", [
             "--results_folder", f"{name}/",
             "--final_voxels_folder", f"{name}/",
-            "--stage", stage
+            "--stage", stage,
+            "--modality", modality
 
         ])]
 

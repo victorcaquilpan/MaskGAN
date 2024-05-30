@@ -19,6 +19,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--results_folder', default='secondstage_solved/', help='path to intermediate results (2nd stage)')
 parser.add_argument('--final_voxels_folder', default='secondstage_solved/', help='path to leave results')
 parser.add_argument('--stage', default='second', help='first or second')
+parser.add_argument('--modality', default='mri2ct', help='specific modality for second stage; mri2ct or ct2mri')
+
 args = parser.parse_args()
 
 real_B_path = 'vol_results/' + args.results_folder  +'real_B/'
@@ -39,7 +41,7 @@ os.makedirs(adjusted_results + 'fake_A/')
 os.makedirs(adjusted_results + 'fake_B/')
 
 # Definition of peak signal noise ratio
-def psnr_function(img_a, img_b, modality):
+def psnr_function(img_a, img_b):
 
     # Rescale values to range 0-255
     img_a = exposure.rescale_intensity(img_a, in_range='image', out_range=(0, 255))
@@ -49,10 +51,6 @@ def psnr_function(img_a, img_b, modality):
     if(mse == 0):  # MSE is zero means no noise is present in the signal . 
                 # Therefore PSNR have no importance. 
         return 100.0
-    if modality == 'mri2ct':
-        max_pixel = 2800.0 # Maximum range
-    elif modality == 'ct2mri':
-        max_pixel = 2000.0
     psnr_val = 20 * log10(255 / sqrt(mse)) 
     return psnr_val 
 
@@ -71,7 +69,7 @@ def getting_metrics(img_a, img_b, modality):
     # Getting SSIM. It is necessary to set a distance between max and min value
     metric_ssim = ssim_function(img_a, img_b, modality)
     # Getting PSNR
-    metric_psnr = psnr_function(img_a,img_b, modality)
+    metric_psnr = psnr_function(img_a,img_b)
     return metric_mae, metric_ssim, metric_psnr
 
 def resize_volume(img,desired_depth = 134,desired_width = 207, desired_height = 226):
@@ -139,7 +137,6 @@ for img_ in real_B:
         r_A = np.rot90(r_A, k = 2, axes = (0,1))
         r_A = np.flip(r_A,axis = (1,2))
 
-
     # # Resizing
     r_B = resize_volume(r_B)
     r_A = resize_volume(r_A)
@@ -154,22 +151,31 @@ for img_ in real_B:
 
     # We need to convert img_a to original ranges (radiation or HU)
     if args.stage == 'first':
-        r_B = ((r_B* (2000 - (-800)))/ 255) + (-800)
-        r_B = np.clip(r_B,a_min= -800, a_max= 2000)
         r_A = ((r_A* (2000 - (0)))/ 255) + (0)
         r_A = np.clip(r_A,a_min= 0, a_max= 2000)
         f_A = ((f_A* (2000 - (0)))/ 255) + (0)
         f_A = np.clip(f_A,a_min= 0, a_max= 2000)
-        f_B = ((f_B* (2000 - (-800)))/ 255) + (-800)
-        f_B = np.clip(f_B,a_min= -800, a_max= 2000)
-    elif args.stage == 'second':
         r_B = ((r_B* (2000 - (-800)))/ 255) + (-800)
         r_B = np.clip(r_B,a_min= -800, a_max= 2000)
-        r_A = ((r_A* (2000 - (-800)))/ 255) + (-800)
-        r_A = np.clip(r_A,a_min= -800, a_max= 2000)
         f_B = ((f_B* (2000 - (-800)))/ 255) + (-800)
         f_B = np.clip(f_B,a_min= -800, a_max= 2000)
-
+        
+    elif args.stage == 'second':
+        if args.modality == "mri2ct":
+            r_A = ((r_A* (2000 - (-800)))/ 255) + (-800)
+            r_A = np.clip(r_A,a_min= -800, a_max= 2000)
+            r_B = ((r_B* (2000 - (-800)))/ 255) + (-800)
+            r_B = np.clip(r_B,a_min= -800, a_max= 2000)
+            f_B = ((f_B* (2000 - (-800)))/ 255) + (-800)
+            f_B = np.clip(f_B,a_min= -800, a_max= 2000)
+        elif args.modality == "ct2mri":
+            r_A = ((r_A* (2000 - (0)))/ 255) + (0)
+            r_A = np.clip(r_A,a_min= 0, a_max= 2000)
+            r_B = ((r_B* (2000 - (0)))/ 255) + (0)
+            r_B = np.clip(r_B,a_min= 0, a_max= 2000)
+            f_B = ((f_B* (2000 - (0)))/ 255) + (0)
+            f_B = np.clip(f_B,a_min= 0, a_max= 2000)
+            
     #Padding
     if args.stage == 'first':
         r_B = np.pad(r_B, pad_width, mode='constant', constant_values=-800)
@@ -177,9 +183,14 @@ for img_ in real_B:
         f_A = np.pad(f_A, pad_width, mode='constant', constant_values=0)
         f_B = np.pad(f_B, pad_width, mode='constant', constant_values=-800)
     elif args.stage == 'second':
-        r_B = np.pad(r_B, pad_width, mode='constant', constant_values=-800)
-        r_A = np.pad(r_A, pad_width, mode='constant', constant_values=-800)
-        f_B = np.pad(f_B, pad_width, mode='constant', constant_values=-800)
+        if args.modality == 'mri2ct':
+            r_B = np.pad(r_B, pad_width, mode='constant', constant_values=-800)
+            r_A = np.pad(r_A, pad_width, mode='constant', constant_values=-800)
+            f_B = np.pad(f_B, pad_width, mode='constant', constant_values=-800)
+        elif args.modality == 'ct2mri':
+            r_B = np.pad(r_B, pad_width, mode='constant', constant_values=0)
+            r_A = np.pad(r_A, pad_width, mode='constant', constant_values=0)
+            f_B = np.pad(f_B, pad_width, mode='constant', constant_values=0)
 
     # Create a NIfTI image
     r_B = nib.Nifti1Image(r_B, affine=np.diag([1, 1, 1, 1]))
@@ -228,7 +239,7 @@ if args.stage == 'first':
                     # Iterate over each slice of the volume
                     for slice in range(img_a.shape[0]):
                         # Compute metrics for the current slice
-                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[slice],img_b[slice], modality= "mri2ct")
+                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[slice],img_b[slice], modality= args.modality)
 
                         # Append metrics to lists
                         mae_per_slice.append(mae_val)
@@ -254,7 +265,7 @@ if args.stage == 'first':
                     # Iterate over each slice of the volume
                     for slice in range(img_a.shape[1]):
                         # Compute metrics for the current slice
-                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[:,slice,:],img_b[:,slice,:], modality= "mri2ct")
+                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[:,slice,:],img_b[:,slice,:], modality= args.modality)
 
                         # Append metrics to lists
                         mae_per_slice.append(mae_val)
@@ -280,7 +291,7 @@ if args.stage == 'first':
                     # Iterate over each slice of the volume
                     for slice in range(img_a.shape[2]):
                         # Compute metrics for the current slice
-                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[:,:,slice],img_b[:,:,slice], modality= "mri2ct")
+                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[:,:,slice],img_b[:,:,slice], modality= args.modality)
 
                         # Append metrics to lists
                         mae_per_slice.append(mae_val)
@@ -301,7 +312,7 @@ if args.stage == 'first':
                     img_b, _ = load_nifti(adjusted_results + fake_class + '/' + path_img)
 
                     # Calculate metrics
-                    mae_val, ssim_val, psnr_val = getting_metrics(img_a,img_b, modality= "mri2ct")
+                    mae_val, ssim_val, psnr_val = getting_metrics(img_a,img_b, modality= args.modality)
                     # Adding values
                     mae += mae_val
                     ssim += ssim_val
@@ -346,7 +357,7 @@ if args.stage == 'first':
                     # Iterate over each slice of the volume
                     for slice in range(img_a.shape[0]):
                         # Compute metrics for the current slice
-                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[slice],img_b[slice], modality= "ct2mri")
+                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[slice],img_b[slice], modality= args.modality)
 
                         # Append metrics to lists
                         mae_per_slice.append(mae_val)
@@ -372,7 +383,7 @@ if args.stage == 'first':
                     # Iterate over each slice of the volume
                     for slice in range(img_a.shape[1]):
                         # Compute metrics for the current slice
-                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[:,slice,:],img_b[:,slice,:], modality= "ct2mri")
+                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[:,slice,:],img_b[:,slice,:], modality= args.modality)
 
                         # Append metrics to lists
                         mae_per_slice.append(mae_val)
@@ -398,7 +409,7 @@ if args.stage == 'first':
                     # Iterate over each slice of the volume
                     for slice in range(img_a.shape[2]):
                         # Compute metrics for the current slice
-                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[:,:,slice],img_b[:,:,slice], modality= "ct2mri")
+                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[:,:,slice],img_b[:,:,slice], modality= args.modality)
 
                         # Append metrics to lists
                         mae_per_slice.append(mae_val)
@@ -419,7 +430,7 @@ if args.stage == 'first':
                     img_b, _ = load_nifti(adjusted_results + fake_class + '/' + path_img)
 
                     # Calculate metrics
-                    mae_val, ssim_val, psnr_val = getting_metrics(img_a,img_b, modality= "ct2mri")
+                    mae_val, ssim_val, psnr_val = getting_metrics(img_a,img_b, modality= args.modality)
                     # Adding values
                     mae += mae_val
                     ssim += ssim_val
@@ -464,7 +475,7 @@ elif args.stage == 'second':
                     # Iterate over each slice of the volume
                     for slice in range(img_a.shape[0]):
                         # Compute metrics for the current slice
-                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[slice],img_b[slice],modality= "mri2ct")
+                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[slice],img_b[slice],modality= args.modality)
 
                         # Append metrics to lists
                         mae_per_slice.append(mae_val)
@@ -490,7 +501,7 @@ elif args.stage == 'second':
                     # Iterate over each slice of the volume
                     for slice in range(img_a.shape[1]):
                         # Compute metrics for the current slice
-                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[:,slice,:],img_b[:,slice,:],modality= "mri2ct")
+                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[:,slice,:],img_b[:,slice,:],modality= args.modality)
 
                         # Append metrics to lists
                         mae_per_slice.append(mae_val)
@@ -516,7 +527,7 @@ elif args.stage == 'second':
                     # Iterate over each slice of the volume
                     for slice in range(img_a.shape[2]):
                         # Compute metrics for the current slice
-                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[:,:,slice],img_b[:,:,slice],modality= "mri2ct")
+                        mae_val, ssim_val, psnr_val = getting_metrics(img_a[:,:,slice],img_b[:,:,slice],modality= args.modality)
 
                         # Append metrics to lists
                         mae_per_slice.append(mae_val)
@@ -537,7 +548,7 @@ elif args.stage == 'second':
                     img_b, _ = load_nifti(adjusted_results + fake_class + '/' + path_img)
 
                     # Calculate metrics
-                    mae_val, ssim_val, psnr_val = getting_metrics(img_a,img_b,modality= "mri2ct")
+                    mae_val, ssim_val, psnr_val = getting_metrics(img_a,img_b,modality= args.modality)
                     # Adding values
                     mae += mae_val
                     ssim += ssim_val
