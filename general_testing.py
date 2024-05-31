@@ -1,13 +1,13 @@
 import subprocess
 
-name = 'maskgan_seconstage_ct'
-dataset = "../../data/maskgan_firststage_pediatric_coronal_ct/"
-stage = 'second'
+name = 'maskgan_firststage_adult'
+dataset = "../../data/data-2d-unsupervised/"
+stage = 'first'
 model = 'mask_gan'
 netG = 'att'
 modality = "mri2ct"
 
-for epoch in range(3,4):
+for epoch in range(10,11):
 
     # # Define the script and its arguments
     scripts_with_args = [
@@ -16,7 +16,7 @@ for epoch in range(3,4):
             "--dataroot",
                     dataset,
                     "--gpu_ids",
-                    "0",
+                    "1",
                     "--model",
                     model,
                     "--name",

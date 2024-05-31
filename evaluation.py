@@ -72,7 +72,7 @@ def getting_metrics(img_a, img_b, modality):
     metric_psnr = psnr_function(img_a,img_b)
     return metric_mae, metric_ssim, metric_psnr
 
-def resize_volume(img,desired_depth = 134,desired_width = 207, desired_height = 226):
+def resize_volume(img,desired_depth = 177,desired_width = 213, desired_height = 196):
 
     current_depth = img.shape[0]
     current_width = img.shape[1]
@@ -103,7 +103,7 @@ def remove_background(img_array):
 real_B = os.listdir(real_B_path)
 
 # Define a padding style
-pad_width = ((20, 20), (20, 20), (20, 20))  # 20 pixels of padding in each dimension
+pad_width = ((15, 15), (15, 15), (15, 15))  # 15 pixels of padding in each dimension
 
 # Go for every image
 for img_ in real_B:
@@ -136,6 +136,24 @@ for img_ in real_B:
         r_A = np.rot90(r_A, axes = (2,0))
         r_A = np.rot90(r_A, k = 2, axes = (0,1))
         r_A = np.flip(r_A,axis = (1,2))
+
+    # Fix orientation
+    f_A = np.rot90(f_A, axes = (0,2))
+    f_A = np.rot90(f_A, axes = (1,2))
+    f_A = np.flip(f_A,axis = (0,2))
+    
+    f_B = np.rot90(f_B, axes = (0,2))
+    f_B = np.rot90(f_B, axes = (1,2))
+    f_B = np.flip(f_B,axis = (0,2))
+
+    r_B = np.rot90(r_B, axes = (0,2))
+    r_B = np.rot90(r_B, axes = (1,2))
+    r_B = np.flip(r_B,axis = (0,2))
+
+    r_A = np.rot90(r_A, axes = (0,2))
+    r_A = np.rot90(r_A, axes = (1,2))
+    r_A = np.flip(r_A,axis = (0,2))
+
 
     # # Resizing
     r_B = resize_volume(r_B)
